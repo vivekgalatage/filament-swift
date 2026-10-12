@@ -1,0 +1,15 @@
+.DS_Store
+/.filament
+/.filament.*
+.build/
+Packages/
+Package.pins
+Package.resolved
+xcuserdata/
+*.xcodeproj
+*.xcworkspace
+
+# Bazel
+/bazel-*
+/MODULE.bazel.lock
+/user.bazelrc

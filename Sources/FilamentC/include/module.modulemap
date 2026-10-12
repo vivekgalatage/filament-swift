@@ -1,0 +1,5 @@
+module FilamentC [system] {
+    header "FilamentBridge.h"
+    requires cplusplus
+    export *
+}
