@@ -1,0 +1,132 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_swift//swift:swift.bzl", "swift_binary")
+
+# Demo applications. Same Bazel workspace as the library (labels like //:Filament), but a
+# separate Bazel *package* so the library build does not pull the demos in.
+
+cc_library(
+    name = "appkit_link",
+    linkopts = select({
+        "@platforms//os:osx": [
+            "-framework",
+            "AppKit",
+            "-framework",
+            "QuartzCore",
+            "-framework",
+            "Metal",
+            "-framework",
+            "MetalKit",
+            "-framework",
+            "CoreGraphics",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "gtk4_link",
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lgtk-4",
+            "-lgdk-4",
+            "-lgio-2.0",
+            "-lgobject-2.0",
+            "-lglib-2.0",
+            "-lX11",
+            "-lpthread",
+            "-ldl",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "win32_link",
+    linkopts = select({
+        "@platforms//os:windows": [
+            "user32.lib",
+            "gdi32.lib",
+            "ole32.lib",
+            "shell32.lib",
+            "comdlg32.lib",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+swift_binary(
+    name = "AppKitDemo",
+    srcs = glob(["Sources/AppKitDemo/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:osx"],
+    copts = [
+        "-parse-as-library",
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        "//:Filament",
+        "//:FilamentAppKit",
+        ":appkit_link",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+swift_binary(
+    name = "GTK4Demo",
+    srcs = glob(["Sources/GTK4Demo/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:linux"],
+    copts = [
+        "-parse-as-library",
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        "//:Filament",
+        "//:FilamentGTK",
+        ":gtk4_link",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+swift_binary(
+    name = "Win32Demo",
+    srcs = glob(["Sources/Win32Demo/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:windows"],
+    copts = [
+        "-parse-as-library",
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        "//:Filament",
+        "//:FilamentWin32",
+        ":win32_link",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# The WinUI 3 demo needs the generated WinRT projections from //WinUIProjections. Those
+# targets are declared only after `WinUIProjections/scripts/generate_winui_projection.py` has
+# run on a Windows machine - so on a fresh checkout this target is present but not
+# buildable, and the platform constraint below keeps it out of `bazel build //...` on macOS
+# and Linux. Run the codegen first, then:
+#
+#   bazel run //Examples:WinUI3Demo
+swift_binary(
+    name = "WinUI3Demo",
+    srcs = glob(["Sources/WinUI3Demo/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:windows"],
+    copts = [
+        "-parse-as-library",
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        "//:Filament",
+        "//:FilamentC",
+        "//:FilamentWin32",
+        "//WinUIProjections:CWinRT",
+        "//WinUIProjections:WindowsFoundation",
+        "//WinUIProjections:UWP",
+        "//WinUIProjections:WinAppSDK",
+        "//WinUIProjections:WinUI",
+        ":win32_link",
+    ],
+    visibility = ["//visibility:public"],
+)

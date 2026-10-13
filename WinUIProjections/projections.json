@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "Drives scripts/generate_winui_projection.py (this file sits next to that script).",
+    "",
+    "swiftwinrt projects EVERYTHING in its -input winmds by default, which creates",
+    "circular module dependencies (thebrowsercompany/swift-winrt #231). This allow-list",
+    "is what keeps the generated modules acyclic: only the namespaces the demo actually",
+    "uses are projected. Add a namespace here, regenerate, then use the new type.",
+    "",
+    "Verified against the working projection in vaiu/src/setu (Sources/WinUI).",
+    "Slider, CheckBox, ComboBox, ComboBoxItem, and Popup are added on top of that",
+    "reference projection for the PBR control panel."
+  ],
+  "include": [
+    "Microsoft.UI.Dispatching.DispatcherQueueController",
+    "Microsoft.UI.Xaml.Application",
+    "Microsoft.UI.Xaml.Controls.Border",
+    "Microsoft.UI.Xaml.Controls.Button",
+    "Microsoft.UI.Xaml.Controls.CheckBox",
+    "Microsoft.UI.Xaml.Controls.ColumnDefinition",
+    "Microsoft.UI.Xaml.Controls.ComboBox",
+    "Microsoft.UI.Xaml.Controls.ComboBoxItem",
+    "Microsoft.UI.Xaml.Controls.Grid",
+    "Microsoft.UI.Xaml.Controls.Primitives.Popup",
+    "Microsoft.UI.Xaml.Controls.RowDefinition",
+    "Microsoft.UI.Xaml.Controls.ScrollViewer",
+    "Microsoft.UI.Xaml.Controls.Slider",
+    "Microsoft.UI.Xaml.Controls.StackPanel",
+    "Microsoft.UI.Xaml.Controls.TextBlock",
+    "Microsoft.UI.Xaml.Controls.XamlControlsResources",
+    "Microsoft.UI.Xaml.Hosting.WindowsXamlManager",
+    "Microsoft.UI.Xaml.Hosting.DesktopWindowXamlSource",
+    "Microsoft.UI.Xaml.Media.SolidColorBrush",
+    "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider"
+  ],
+  "exclude": [
+    "Windows.Media.Playback"
+  ]
+}

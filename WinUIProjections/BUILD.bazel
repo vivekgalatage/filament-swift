@@ -1,0 +1,28 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load(":defs.bzl", "declare_projections")
+
+# Generated WinRT projections.
+#
+# Produced on a Windows machine by
+#   python WinUIProjections/scripts/generate_winui_projection.py
+#
+# `declare_projections` skips any module that has not been generated yet, so
+# `bazel build //...` works on a fresh checkout on every platform. Before codegen, only
+# `WinRTVersion` exists here and `bazel query //WinUIProjections:*` will not list the
+# projection modules.
+
+exports_files([
+    "projections.json",
+    "README.md",
+])
+
+# Always present: keeps the package valid so the manifest and this BUILD file resolve
+# before the codegen has run.
+swift_library(
+    name = "WinRTVersion",
+    srcs = ["Sources/WinRTVersion/WinRTVersion.swift"],
+    copts = ["-swift-version", "6"],
+    visibility = ["//visibility:public"],
+)
+
+declare_projections()

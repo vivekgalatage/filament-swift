@@ -1,1 +1,159 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_swift//swift:swift.bzl", "swift_binary", "swift_library", "swift_test")
+
+# The library package. The demos live in Examples/ (their own BUILD file) and the
+# generated WinRT bindings in WinUIProjections/, so `bazel build //:all` here builds only
+# the library.
+
 exports_files(["filament_repo.bzl"])
+
+cc_library(
+    name = "FilamentC",
+    srcs = ["Sources/FilamentC/stub.cpp"],
+    hdrs = glob(["Sources/FilamentC/include/**/*.h"]),
+    includes = ["Sources/FilamentC/include"],
+    copts = ["-std=c++17"],
+    deps = ["@filament//:all"],
+    visibility = ["//visibility:public"],
+)
+
+swift_library(
+    name = "Filament",
+    srcs = glob(["Sources/Filament/**/*.swift"]),
+    copts = [
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        ":FilamentC",
+        "@filament//:all",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Platform-specific native UI framework dependencies.
+# Platform frameworks belong to the platform-specific host-view targets: putting them on
+# the shared Filament target breaks linking on the other platforms.
+cc_library(
+    name = "appkit_deps",
+    linkopts = select({
+        "@platforms//os:osx": [
+            "-framework",
+            "AppKit",
+            "-framework",
+            "QuartzCore",
+            "-framework",
+            "Metal",
+            "-framework",
+            "MetalKit",
+            "-framework",
+            "CoreGraphics",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "win32_deps",
+    linkopts = select({
+        "@platforms//os:windows": [
+            "user32.lib",
+            "gdi32.lib",
+            "ole32.lib",
+            "shell32.lib",
+            "dwmapi.lib",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "gtk4_deps",
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lgtk-4",
+            "-lgdk-4",
+            "-lgobject-2.0",
+            "-lglib-2.0",
+            "-lX11",
+            "-lpthread",
+            "-ldl",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+swift_library(
+    name = "FilamentAppKit",
+    srcs = glob(["Sources/FilamentAppKit/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:osx"],
+    copts = [
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        ":Filament",
+        ":FilamentC",
+        ":appkit_deps",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+swift_library(
+    name = "FilamentWin32",
+    srcs = glob(["Sources/FilamentWin32/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:windows"],
+    copts = [
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        ":Filament",
+        ":FilamentC",
+        ":win32_deps",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+swift_library(
+    name = "FilamentGTK",
+    srcs = glob(["Sources/FilamentGTK/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:linux"],
+    copts = [
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        ":Filament",
+        ":FilamentC",
+        ":gtk4_deps",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# --- Tests ----------------------------------------------------------------------
+
+swift_test(
+    name = "FilamentTests",
+    srcs = glob(["Tests/FilamentTests/**/*.swift"]),
+    copts = [
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        ":Filament",
+        ":FilamentC",
+        "@filament//:all",
+    ],
+)
+
+swift_test(
+    name = "FilamentAppKitTests",
+    srcs = glob(["Tests/FilamentAppKitTests/**/*.swift"]),
+    target_compatible_with = ["@platforms//os:osx"],
+    copts = [
+        "-cxx-interoperability-mode=default",
+    ],
+    deps = [
+        ":Filament",
+        ":FilamentAppKit",
+        ":FilamentC",
+        ":appkit_deps",
+        "@filament//:all",
+    ],
+)

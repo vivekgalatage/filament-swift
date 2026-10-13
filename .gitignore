@@ -13,3 +13,17 @@ xcuserdata/
 /bazel-*
 /MODULE.bazel.lock
 /user.bazelrc
+
+# WinUI 3 generated WinRT projections (see WinUIProjections/README.md)
+/WinUIProjections/Sources/CWinRT/
+/WinUIProjections/Sources/WindowsFoundation/
+/WinUIProjections/Sources/UWP/
+/WinUIProjections/Sources/WinAppSDK/
+/WinUIProjections/Sources/WinUI/
+/WinUIProjections/_projection/
+/WinUIProjections/_tools/
+/WinUIProjections/_packages/
+
+# Python
+__pycache__/
+*.pyc
