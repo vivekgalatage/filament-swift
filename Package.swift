@@ -165,7 +165,7 @@ let filamentLinkerSettings: [LinkerSetting] = [
     .linkedLibrary("c++abi"),
     .linkedLibrary("pthread"),
     .linkedLibrary("dl"),
-    .unsafeFlags(["-Wl,--start-group"] + linuxStaticLibs + ["-Wl,--end-group"]),
+    .unsafeFlags(["-Xlinker", "--start-group"] + linuxStaticLibs + ["-Xlinker", "--end-group"]),
 ]
 #else
 let filamentStaticLibs: [String] = filamentLibraryNames.map { "\(libDir)/lib\($0).a" }
