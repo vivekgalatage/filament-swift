@@ -163,13 +163,13 @@ final class GTKSceneController {
 
         camera.update(dt: dt)
 
-        if isAttached, hostView.renderFrame() {
+        if isAttached {
             let bufferSize = pixelBuffer.count
-            let readOk = pixelBuffer.withUnsafeMutableBytes { ptr -> Bool in
+            let rendered = pixelBuffer.withUnsafeMutableBytes { ptr -> Bool in
                 guard let base = ptr.baseAddress else { return false }
-                return hostView.readPixels(into: base, bufferSize: bufferSize)
+                return hostView.renderFrame(readPixelsBuffer: base, bufferSize: bufferSize)
             }
-            if readOk, let drawingArea {
+            if rendered, let drawingArea {
                 convertRGBAToCairoARGB32()
                 gtk_widget_queue_draw(drawingArea)
             }

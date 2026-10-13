@@ -140,16 +140,24 @@ public final class FilamentGTKView {
     public var isAttached: Bool { swapChain != nil }
 
     /// Renders a single frame through the Filament pipeline.
+    ///
+    /// When `readPixelsBuffer` is provided, `readPixels` is performed within the active frame
+    /// (between `renderView` and `endFrame`), satisfying Filament's requirement that pixel readback
+    /// must execute before the frame is finished.
     @discardableResult
-    public func renderFrame() -> Bool {
+    public func renderFrame(readPixelsBuffer: UnsafeMutableRawPointer? = nil, bufferSize: Int = 0) -> Bool {
         guard let renderer = engine.renderer,
               let view = engine.view,
               let sc = swapChain else { return false }
 
         if FilamentBridge.beginFrame(renderer, sc) {
             FilamentBridge.renderView(renderer, view)
+            var readOk = true
+            if let buf = readPixelsBuffer, bufferSize > 0 {
+                readOk = engine.readPixels(width: currentWidth, height: currentHeight, into: buf, bufferSize: bufferSize)
+            }
             FilamentBridge.endFrame(renderer)
-            return true
+            return readOk
         }
         return false
     }
