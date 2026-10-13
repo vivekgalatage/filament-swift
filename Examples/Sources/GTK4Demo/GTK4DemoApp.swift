@@ -258,7 +258,7 @@ final class GTK4DemoApp {
         }
         overlay.show()
         self.overlayWindow = overlay
-        print("[GTK4Demo] Floating companion overlay active across desktop (borderless, transparent).")
+        print("[GTK4Demo] Floating companion overlay active across desktop (borderless, transparent). Left-Drag: Move Window | Right/Shift-Drag: Orbit Model | Scroll: Zoom | Double-Click: Reset")
     }
 
     private func shutdown() {

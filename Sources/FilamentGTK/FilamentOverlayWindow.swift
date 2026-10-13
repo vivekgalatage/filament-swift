@@ -128,6 +128,18 @@ private func x11ChangeProperty(
 @_silgen_name("XFlush")
 private func x11Flush(_ display: OpaquePointer?) -> Int32
 
+@_silgen_name("XPending")
+private func x11Pending(_ display: OpaquePointer?) -> Int32
+
+@_silgen_name("XNextEvent")
+private func x11NextEvent(_ display: OpaquePointer?, _ event: UnsafeMutableRawPointer?) -> Int32
+
+@_silgen_name("XCreateFontCursor")
+private func x11CreateFontCursor(_ display: OpaquePointer?, _ shape: UInt32) -> UInt
+
+@_silgen_name("XFreeCursor")
+private func x11FreeCursor(_ display: OpaquePointer?, _ cursor: UInt) -> Int32
+
 @_silgen_name("dlsym")
 private func dlsym(_ handle: UnsafeMutableRawPointer?, _ symbol: UnsafePointer<CChar>?) -> UnsafeMutableRawPointer?
 
@@ -143,12 +155,16 @@ private let kCWBackPixel: UInt = 1 << 1
 private let kCWBorderPixel: UInt = 1 << 3
 private let kCWEventMask: UInt = 1 << 11
 private let kCWColormap: UInt = 1 << 13
+private let kCWCursor: UInt = 1 << 14
 
 private let kExposureMask: Int = 1 << 15
 private let kStructureNotifyMask: Int = 1 << 17
 private let kButtonPressMask: Int = 1 << 2
 private let kButtonReleaseMask: Int = 1 << 3
 private let kPointerMotionMask: Int = 1 << 6
+private let kButtonMotionMask: Int = 1 << 13
+
+private let kXC_left_ptr: UInt32 = 68
 
 private let kShapeInput: Int32 = 2
 private let kShapeSet: Int32 = 0
@@ -198,6 +214,45 @@ private struct MotifWmHints {
     var status: UInt = 0
 }
 
+/// 192-byte layout matching Xlib's `XEvent` union on 64-bit Linux.
+private struct RawXEvent {
+    var pad: (UInt64, UInt64, UInt64, UInt64,
+              UInt64, UInt64, UInt64, UInt64,
+              UInt64, UInt64, UInt64, UInt64,
+              UInt64, UInt64, UInt64, UInt64,
+              UInt64, UInt64, UInt64, UInt64,
+              UInt64, UInt64, UInt64, UInt64) = (
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    )
+
+    var type: Int32 {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 0, as: Int32.self) }
+    }
+    var window: UInt {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 32, as: UInt.self) }
+    }
+    var x: Int32 {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 64, as: Int32.self) }
+    }
+    var y: Int32 {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 68, as: Int32.self) }
+    }
+    var x_root: Int32 {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 72, as: Int32.self) }
+    }
+    var y_root: Int32 {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 76, as: Int32.self) }
+    }
+    var state: UInt32 {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 80, as: UInt32.self) }
+    }
+    var button: UInt32 {
+        withUnsafeBytes(of: self) { $0.load(fromByteOffset: 84, as: UInt32.self) }
+    }
+}
+
 /// Transparent floating companion/assistant overlay for Linux (X11 / Xwayland).
 ///
 /// Hosts a 3D GLB model (with blend shapes and skeletal animations) inside a borderless,
@@ -211,22 +266,31 @@ private struct MotifWmHints {
 /// - Supports optional click-through (`isClickThrough = true`) via the XShape extension.
 @MainActor
 public final class FilamentOverlayWindow {
+    public enum InteractionMode: Sendable {
+        /// Left-drag moves the floating window across the desktop; Right-drag (or Shift+Left-drag) orbits the 3D model.
+        case windowMove
+        /// Left-drag orbits the 3D model; Right-drag (or Shift+Left-drag) moves the floating window.
+        case modelOrbit
+    }
+
     private final class Storage: @unchecked Sendable {
         var display: OpaquePointer?
         var xid: UInt = 0
         var colormap: UInt = 0
         var gc: OpaquePointer?
         var ximage: UnsafeMutableRawPointer?
+        var cursor: UInt = 0
         var ownsDisplay = false
         var headlessSwapChain: OpaquePointer?
 
-        func detach() -> (display: OpaquePointer?, xid: UInt, colormap: UInt, gc: OpaquePointer?, ximage: UnsafeMutableRawPointer?, ownsDisplay: Bool, sc: OpaquePointer?) {
-            let res = (display, xid, colormap, gc, ximage, ownsDisplay, headlessSwapChain)
+        func detach() -> (display: OpaquePointer?, xid: UInt, colormap: UInt, gc: OpaquePointer?, ximage: UnsafeMutableRawPointer?, cursor: UInt, ownsDisplay: Bool, sc: OpaquePointer?) {
+            let res = (display, xid, colormap, gc, ximage, cursor, ownsDisplay, headlessSwapChain)
             display = nil
             xid = 0
             colormap = 0
             gc = nil
             ximage = nil
+            cursor = 0
             ownsDisplay = false
             headlessSwapChain = nil
             return res
@@ -246,6 +310,25 @@ public final class FilamentOverlayWindow {
 
     public private(set) var currentPositionX: Int32
     public private(set) var currentPositionY: Int32
+
+    /// Determines whether primary Left-drag moves the floating window or orbits the 3D model.
+    /// Defaults to `.windowMove`.
+    public var primaryInteractionMode: InteractionMode = .windowMove
+
+    private var isDraggingWindow = false
+    private var dragStartMouseRootX: Int32 = 0
+    private var dragStartMouseRootY: Int32 = 0
+    private var dragStartWinX: Int32 = 0
+    private var dragStartWinY: Int32 = 0
+
+    private var isOrbitingCamera = false
+    private var isPanningCamera = false
+    private var lastMouseX: Int32 = 0
+    private var lastMouseY: Int32 = 0
+    private var lastClickTime: Double = 0.0
+
+    private var animationTime: Float = 0.0
+    private var lastFrameTime: Double = ProcessInfo.processInfo.systemUptime
 
     private var rgbaBuffer: [UInt8]
     private var bgraBuffer: [UInt8]
@@ -289,7 +372,7 @@ public final class FilamentOverlayWindow {
         let storage = storage
 
         FilamentMainActor.perform {
-            let (disp, win, cmap, gc, img, owns, sc) = storage.detach()
+            let (disp, win, cmap, gc, img, cur, owns, sc) = storage.detach()
             if let sc {
                 eng.destroySwapChain(sc)
             }
@@ -299,6 +382,7 @@ public final class FilamentOverlayWindow {
                     img.advanced(by: 16).assumingMemoryBound(to: UnsafeMutableRawPointer?.self).pointee = nil
                     _ = x11DestroyImage(img)
                 }
+                if cur != 0 { _ = x11FreeCursor(disp, cur) }
                 if let gc { _ = x11FreeGC(disp, gc) }
                 if win != 0 { _ = x11DestroyWindow(disp, win) }
                 if cmap != 0 { _ = x11FreeColormap(disp, cmap) }
@@ -319,11 +403,11 @@ public final class FilamentOverlayWindow {
     }
 
     private func setupX11OverlayWindow() {
-        var display = resolveGdkXDisplay()
-        var owns = false
+        var display = x11OpenDisplay(nil)
+        var owns = true
         if display == nil {
-            display = x11OpenDisplay(nil)
-            owns = true
+            display = resolveGdkXDisplay()
+            owns = false
         }
 
         guard let display else {
@@ -357,13 +441,17 @@ public final class FilamentOverlayWindow {
         let colormap = visualPtr != nil ? x11CreateColormap(display, root, visualPtr, kAllocNone) : 0
         storage.colormap = colormap
 
+        let cursor = x11CreateFontCursor(display, kXC_left_ptr)
+        storage.cursor = cursor
+
         var attrs = XSetWindowAttributes()
         attrs.background_pixel = 0
         attrs.border_pixel = 0
         attrs.colormap = colormap
-        attrs.event_mask = kExposureMask | kStructureNotifyMask | kButtonPressMask | kButtonReleaseMask | kPointerMotionMask
+        attrs.cursor = cursor
+        attrs.event_mask = kExposureMask | kStructureNotifyMask | kButtonPressMask | kButtonReleaseMask | kPointerMotionMask | kButtonMotionMask
 
-        let valuemask = kCWBackPixel | kCWBorderPixel | kCWEventMask | (colormap != 0 ? kCWColormap : 0)
+        let valuemask = kCWBackPixel | kCWBorderPixel | kCWEventMask | (colormap != 0 ? kCWColormap : 0) | (cursor != 0 ? kCWCursor : 0)
 
         let win = withUnsafeMutablePointer(to: &attrs) { ptr in
             x11CreateWindow(
@@ -509,10 +597,121 @@ public final class FilamentOverlayWindow {
         _ = x11Flush(display)
     }
 
+    // MARK: - Event Polling & User Interaction
+
+    /// Polls pending X11 events for the overlay window, handling dragging, orbiting, panning, and zooming.
+    public func pollEvents() {
+        guard let display = storage.display, storage.xid != 0 else { return }
+
+        while x11Pending(display) > 0 {
+            var ev = RawXEvent()
+            _ = withUnsafeMutablePointer(to: &ev) { ptr in
+                x11NextEvent(display, UnsafeMutableRawPointer(ptr))
+            }
+
+            switch ev.type {
+            case 4: // ButtonPress
+                let btn = ev.button
+                let isShift = (ev.state & 1) != 0
+
+                if btn == 1 {
+                    if isShift || primaryInteractionMode == .modelOrbit {
+                        isOrbitingCamera = true
+                        lastMouseX = ev.x
+                        lastMouseY = ev.y
+                    } else {
+                        let now = ProcessInfo.processInfo.systemUptime
+                        if now - lastClickTime < 0.35 {
+                            camera.reset()
+                        }
+                        lastClickTime = now
+
+                        isDraggingWindow = true
+                        dragStartMouseRootX = ev.x_root
+                        dragStartMouseRootY = ev.y_root
+                        dragStartWinX = currentPositionX
+                        dragStartWinY = currentPositionY
+                    }
+                } else if btn == 2 {
+                    isPanningCamera = true
+                    lastMouseX = ev.x
+                    lastMouseY = ev.y
+                } else if btn == 3 {
+                    if primaryInteractionMode == .modelOrbit {
+                        isDraggingWindow = true
+                        dragStartMouseRootX = ev.x_root
+                        dragStartMouseRootY = ev.y_root
+                        dragStartWinX = currentPositionX
+                        dragStartWinY = currentPositionY
+                    } else {
+                        isOrbitingCamera = true
+                        lastMouseX = ev.x
+                        lastMouseY = ev.y
+                    }
+                } else if btn == 4 {
+                    camera.zoom(delta: 1.5)
+                } else if btn == 5 {
+                    camera.zoom(delta: -1.5)
+                }
+
+            case 5: // ButtonRelease
+                let btn = ev.button
+                if btn == 1 {
+                    if isDraggingWindow { isDraggingWindow = false }
+                    if isOrbitingCamera { isOrbitingCamera = false }
+                } else if btn == 2 {
+                    isPanningCamera = false
+                } else if btn == 3 {
+                    isOrbitingCamera = false
+                    isDraggingWindow = false
+                }
+
+            case 6: // MotionNotify
+                if isDraggingWindow {
+                    let dx = ev.x_root - dragStartMouseRootX
+                    let dy = ev.y_root - dragStartMouseRootY
+                    setPosition(x: dragStartWinX + dx, y: dragStartWinY + dy)
+                } else if isOrbitingCamera {
+                    let dx = Double(ev.x - lastMouseX)
+                    let dy = Double(ev.y - lastMouseY)
+                    lastMouseX = ev.x
+                    lastMouseY = ev.y
+                    camera.orbit(deltaX: dx, deltaY: dy)
+                } else if isPanningCamera {
+                    let dx = Double(ev.x - lastMouseX)
+                    let dy = Double(ev.y - lastMouseY)
+                    lastMouseX = ev.x
+                    lastMouseY = ev.y
+                    camera.pan(deltaX: dx, deltaY: dy)
+                }
+
+            default:
+                break
+            }
+        }
+    }
+
     // MARK: - Frame Rendering & Alpha Blitting
 
     @discardableResult
     public func renderFrame() -> Bool {
+        pollEvents()
+
+        let now = ProcessInfo.processInfo.systemUptime
+        let dt = Float(min(0.25, max(0, now - lastFrameTime)))
+        lastFrameTime = now
+
+        if model.hasAnimations {
+            animationTime += dt
+            let dur = model.activeAnimationDuration
+            if dur > 0.001 {
+                animationTime = animationTime.truncatingRemainder(dividingBy: dur)
+            }
+            model.applyAnimation(time: animationTime)
+        }
+
+        camera.update(dt: dt)
+
         guard
             let renderer = engine.renderer,
             let view = engine.view,
