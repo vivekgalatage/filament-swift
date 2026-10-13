@@ -89,6 +89,7 @@ func gtk_widget_add_tick_callback(
     _ destroy_notify: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
 ) -> UInt32
 
+@discardableResult
 @_silgen_name("g_signal_connect_data")
 func g_signal_connect_data(
     _ instance: OpaquePointer?,
@@ -97,7 +98,7 @@ func g_signal_connect_data(
     _ data: UnsafeMutableRawPointer?,
     _ destroy_data: UnsafeMutableRawPointer?,
     _ connect_flags: Int32
-) -> Culong
+) -> CUnsignedLong
 
 // MARK: - Control Panel Widget Bindings
 

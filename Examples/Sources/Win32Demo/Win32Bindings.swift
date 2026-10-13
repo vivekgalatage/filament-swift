@@ -152,7 +152,7 @@ func setText(_ hwnd: HWND?, _ text: String) {
 
 @inline(__always)
 func hwndFromLPARAM(_ lParam: Int64) -> UnsafeRawPointer? {
-    UnsafeRawPointer(bitPattern: Int(bitPattern: lParam))
+    UnsafeRawPointer(bitPattern: Int(truncatingIfNeeded: lParam))
 }
 
 @inline(__always)

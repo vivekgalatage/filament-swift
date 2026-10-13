@@ -42,7 +42,7 @@ private struct Win32OPENFILENAMEW {
 enum Win32FileDialog {
     static func promptForGlbFile(owner: HWND?) -> URL? {
         let filterString = "glTF Binary (*.glb)\0*.glb\0All Files (*.*)\0*.*\0\0"
-        var filterWide = Array(filterString.utf16)
+        let filterWide = Array(filterString.utf16)
         let titleString = "Select glTF Binary (.glb) Model"
         let defExtString = "glb"
         var fileBuffer = [WCHAR](repeating: 0, count: 1024)
