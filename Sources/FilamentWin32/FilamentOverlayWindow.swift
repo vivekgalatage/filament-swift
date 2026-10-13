@@ -139,6 +139,7 @@ public final class FilamentOverlayWindow {
     private let storage = Storage()
 
     public let engine: FilamentEngine
+    public let pbr: FilamentPBRController
     public let model: FilamentModel
     public let camera: FilamentOrbitCamera
 
@@ -195,6 +196,7 @@ public final class FilamentOverlayWindow {
 
         let eng = engine ?? FilamentEngine(backend: .vulkan)
         self.engine = eng
+        self.pbr = FilamentPBRController(engine: eng)
         self.model = FilamentModel(engine: eng)
         self.camera = FilamentOrbitCamera(engine: eng)
 
@@ -437,6 +439,10 @@ public final class FilamentOverlayWindow {
 
     public func loadModel(from url: URL) throws {
         try model.loadGlb(at: url)
+        model.setRotation(radiansY: 0)
+        if model.hasAnimations {
+            model.selectAnimation(at: 0)
+        }
     }
 
     public func setBlendShape(name: String, weight: Float) {

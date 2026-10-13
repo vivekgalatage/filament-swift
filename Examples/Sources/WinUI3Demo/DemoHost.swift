@@ -534,14 +534,21 @@ final class DemoHost {
     }
 
     func pbrSettings() -> FilamentPBRSettings { pbr.settings }
-    func mutatePBR(_ body: (inout FilamentPBRSettings) -> Void) { pbr.mutate(body) }
-    func resetPBR() { pbr.reset() }
+    func mutatePBR(_ body: (inout FilamentPBRSettings) -> Void) {
+        pbr.mutate(body)
+        overlay?.pbr.update(pbr.settings)
+    }
+    func resetPBR() {
+        pbr.reset()
+        overlay?.pbr.update(pbr.settings)
+    }
 
     // MARK: - Floating Assistant Overlay
 
     func toggleAssistantOverlay() {
         if overlay == nil {
             let ov = FilamentOverlayWindow(width: 380, height: 380)
+            ov.pbr.update(pbr.settings)
             if let currentModelUrl {
                 try? ov.loadModel(from: currentModelUrl)
             }
