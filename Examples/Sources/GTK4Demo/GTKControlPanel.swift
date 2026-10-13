@@ -79,7 +79,7 @@ final class GTKControlPanel {
         let resetCallback: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
             guard let userData else { return }
             let panel = Unmanaged<GTKControlPanel>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in panel.resetPBRControls() }
+            MainActor.assumeIsolated { panel.resetPBRControls() }
         }
         g_signal_connect_data(
             resetBtn,
@@ -127,7 +127,7 @@ final class GTKControlPanel {
             let widgetKey = UInt(bitPattern: widget)
             guard let userData else { return }
             let panel = Unmanaged<GTKControlPanel>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in panel.applySlider(widgetKey, value) }
+            MainActor.assumeIsolated { panel.applySlider(widgetKey, value) }
         }
         g_signal_connect_data(
             scale,
@@ -151,7 +151,7 @@ final class GTKControlPanel {
             let widgetKey = UInt(bitPattern: widget)
             guard let userData else { return }
             let panel = Unmanaged<GTKControlPanel>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in panel.applyToggle(widgetKey, active) }
+            MainActor.assumeIsolated { panel.applyToggle(widgetKey, active) }
         }
         g_signal_connect_data(
             check,
@@ -190,7 +190,7 @@ final class GTKControlPanel {
             let widgetKey = UInt(bitPattern: widget)
             guard let userData else { return }
             let panel = Unmanaged<GTKControlPanel>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in panel.applyDropdown(widgetKey, index) }
+            MainActor.assumeIsolated { panel.applyDropdown(widgetKey, index) }
         }
         g_signal_connect_data(
             dropdown,

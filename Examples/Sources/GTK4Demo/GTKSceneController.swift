@@ -48,30 +48,25 @@ final class GTKSceneController {
             return
         }
 
-        let getDisplayName = lookupSymbol(
-            "gdk_display_get_name",
-            as: (@convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?).self
-        )
-        let displayName = getDisplayName?(display).map { String(cString: $0) } ?? ""
-        guard displayName.hasPrefix(":") else {
-            print("[GTK4Demo] Filament requires an X11 display on Linux (current display: \(displayName.isEmpty ? "unknown" : displayName)).")
-            return
-        }
-
         guard
             let getXDisplay = lookupSymbol("gdk_x11_get_xdisplay", as: (@convention(c) (OpaquePointer?) -> UnsafeMutableRawPointer?).self),
             let getNative = lookupSymbol("gtk_widget_get_native", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self),
             let getSurface = lookupSymbol("gtk_native_get_surface", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self),
-            let getXid = lookupSymbol("gdk_x11_surface_get_xid", as: (@convention(c) (OpaquePointer?) -> UInt).self)
+            let getXid = lookupSymbol("gdk_x11_surface_get_xid", as: (@convention(c) (OpaquePointer?) -> UInt).self),
+            getXDisplay(display) != nil
         else {
-            print("[GTK4Demo] This GDK build has no X11 backend; Filament cannot create a surface.")
+            let getDisplayName = lookupSymbol(
+                "gdk_display_get_name",
+                as: (@convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?).self
+            )
+            let displayName = getDisplayName?(display).map { String(cString: $0) } ?? "unknown"
+            print("[GTK4Demo] Filament requires an X11 GDK backend on Linux (current display: \(displayName)). Run with GDK_BACKEND=x11.")
             return
         }
 
         guard
             let native = getNative(drawingArea),
-            let surface = getSurface(native),
-            getXDisplay(display) != nil
+            let surface = getSurface(native)
         else {
             print("[GTK4Demo] Could not resolve the native X11 window handle.")
             return

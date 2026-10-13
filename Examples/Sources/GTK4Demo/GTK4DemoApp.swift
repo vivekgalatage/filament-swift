@@ -13,7 +13,8 @@ final class GTK4DemoApp {
     func run() {
         print("[GTK4Demo] Starting GTK 4 application...")
         let appId = "org.filament.swift.gtk4demo"
-        guard let app = gtk_application_new(appId, 0) else {
+        // G_APPLICATION_NON_UNIQUE = 32 allows standalone execution without D-Bus single-instance handoff
+        guard let app = gtk_application_new(appId, 32) else {
             print("[GTK4Demo] Failed to create GTK application.")
             return
         }
@@ -24,7 +25,7 @@ final class GTK4DemoApp {
         let activateCallback: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { appPtr, userData in
             guard let appPtr, let userData else { return }
             let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 selfApp.setupWindow(app: appPtr)
             }
         }
@@ -82,7 +83,7 @@ final class GTK4DemoApp {
         let realizeCallback: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
             guard let userData else { return }
             let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in selfApp.scene?.attachSwapChainIfPossible() }
+            MainActor.assumeIsolated { selfApp.scene?.attachSwapChainIfPossible() }
         }
         g_signal_connect_data(
             drawingArea,
@@ -122,21 +123,21 @@ final class GTK4DemoApp {
         let openClicked: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
             guard let userData else { return }
             let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in selfApp.presentOpenDialog() }
+            MainActor.assumeIsolated { selfApp.presentOpenDialog() }
         }
         g_signal_connect_data(openBtn, "clicked", unsafeBitCast(openClicked, to: (@convention(c) () -> Void).self), selfPtr, nil, 0)
 
         let resetCamClicked: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
             guard let userData else { return }
             let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in selfApp.scene?.resetCamera() }
+            MainActor.assumeIsolated { selfApp.scene?.resetCamera() }
         }
         g_signal_connect_data(resetCamBtn, "clicked", unsafeBitCast(resetCamClicked, to: (@convention(c) () -> Void).self), selfPtr, nil, 0)
 
         let animClicked: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
             guard let userData else { return }
             let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
-            Task { @MainActor in selfApp.scene?.cycleNextAnimation() }
+            MainActor.assumeIsolated { selfApp.scene?.cycleNextAnimation() }
         }
         g_signal_connect_data(animBtn, "clicked", unsafeBitCast(animClicked, to: (@convention(c) () -> Void).self), selfPtr, nil, 0)
     }
@@ -220,6 +221,9 @@ final class GTK4DemoApp {
 @main
 struct GTK4DemoMain {
     static func main() {
+        if getenv("GDK_BACKEND") == nil {
+            setenv("GDK_BACKEND", "x11", 0)
+        }
         let app = GTK4DemoApp()
         withExtendedLifetime(app) {
             app.run()
