@@ -244,6 +244,18 @@ func cairo_surface_destroy(_ surface: OpaquePointer?)
 @_silgen_name("cairo_surface_flush")
 func cairo_surface_flush(_ surface: OpaquePointer?)
 
+@_silgen_name("cairo_set_source_rgb")
+func cairo_set_source_rgb(_ cr: OpaquePointer?, _ red: Double, _ green: Double, _ blue: Double)
+
+@_silgen_name("cairo_scale")
+func cairo_scale(_ cr: OpaquePointer?, _ sx: Double, _ sy: Double)
+
+@_silgen_name("cairo_save")
+func cairo_save(_ cr: OpaquePointer?)
+
+@_silgen_name("cairo_restore")
+func cairo_restore(_ cr: OpaquePointer?)
+
 // MARK: - GTK Constants & Symbol Lookup
 
 let GTK_ORIENTATION_HORIZONTAL: Int32 = 0

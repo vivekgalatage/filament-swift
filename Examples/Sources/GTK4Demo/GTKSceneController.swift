@@ -34,7 +34,14 @@ final class GTKSceneController {
         self.model = FilamentModel(engine: view.engine)
         self.camera = FilamentOrbitCamera(engine: view.engine)
 
-        if let first = ModelDiscovery.discoverModels().first {
+        let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let repoRoot = sourceDir.deletingLastPathComponent().deletingLastPathComponent()
+        let fallbackPaths = [
+            repoRoot.appendingPathComponent("Resources", isDirectory: true),
+            repoRoot.appendingPathComponent("Examples/Resources", isDirectory: true),
+        ]
+        let models = ModelDiscovery.discoverModels(extraSearchPaths: fallbackPaths)
+        if let first = models.first {
             openModel(at: first.url)
         }
     }
@@ -58,17 +65,33 @@ final class GTKSceneController {
         }
     }
 
-    func draw(cr: OpaquePointer?) {
-        guard let cr, isAttached, !pixelBuffer.isEmpty else { return }
+    func draw(cr: OpaquePointer?, width: Int32, height: Int32) {
+        guard let cr else { return }
+
+        // Fill entire drawing area with Filament studio background color (matches clear color)
+        // so no GTK theme background shows through during resize or before the first frame.
+        cairo_set_source_rgb(cr, 0.38, 0.41, 0.47)
+        cairo_paint(cr)
+
+        guard isAttached, !pixelBuffer.isEmpty else { return }
         let w = Int32(currentWidth)
         let h = Int32(currentHeight)
+        guard w > 0, h > 0 else { return }
         let stride = w * 4
 
         pixelBuffer.withUnsafeMutableBytes { raw in
             guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
             guard let surface = cairo_image_surface_create_for_data(base, CAIRO_FORMAT_ARGB32, w, h, stride) else { return }
+            cairo_surface_flush(surface)
+            cairo_save(cr)
+            if width != w || height != h {
+                let sx = Double(width) / Double(w)
+                let sy = Double(height) / Double(h)
+                cairo_scale(cr, sx, sy)
+            }
             cairo_set_source_surface(cr, surface, 0.0, 0.0)
             cairo_paint(cr)
+            cairo_restore(cr)
             cairo_surface_destroy(surface)
         }
     }

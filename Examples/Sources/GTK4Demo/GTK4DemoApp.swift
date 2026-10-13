@@ -95,11 +95,11 @@ final class GTK4DemoApp {
             0
         )
 
-        let drawCallback: @convention(c) (OpaquePointer?, OpaquePointer?, Int32, Int32, UnsafeMutableRawPointer?) -> Void = { _, cr, _, _, userData in
+        let drawCallback: @convention(c) (OpaquePointer?, OpaquePointer?, Int32, Int32, UnsafeMutableRawPointer?) -> Void = { _, cr, width, height, userData in
             guard let userData, let cr else { return }
             let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
             MainActor.assumeIsolated {
-                selfApp.scene?.draw(cr: cr)
+                selfApp.scene?.draw(cr: cr, width: width, height: height)
             }
         }
         gtk_drawing_area_set_draw_func(drawingArea, drawCallback, selfPtr, nil)
@@ -242,7 +242,13 @@ final class GTK4DemoApp {
 
         print("[GTK4Demo] Launching transparent floating companion overlay...")
         let overlay = FilamentOverlayWindow(width: 420, height: 560, initialX: 120, initialY: 120)
-        let modelUrl = scene?.activeModelUrl ?? ModelDiscovery.discoverModels().first?.url
+        let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let repoRoot = sourceDir.deletingLastPathComponent().deletingLastPathComponent()
+        let fallbackPaths = [
+            repoRoot.appendingPathComponent("Resources", isDirectory: true),
+            repoRoot.appendingPathComponent("Examples/Resources", isDirectory: true),
+        ]
+        let modelUrl = scene?.activeModelUrl ?? ModelDiscovery.discoverModels(extraSearchPaths: fallbackPaths).first?.url
         if let modelUrl {
             do {
                 try overlay.loadModel(from: modelUrl)
