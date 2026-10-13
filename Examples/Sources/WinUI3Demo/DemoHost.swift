@@ -91,6 +91,33 @@ private func win32ReleaseCapture() -> Int32
 @_silgen_name("SetFocus")
 private func win32SetFocus(_ hWnd: UnsafeRawPointer?) -> UnsafeRawPointer?
 
+private let GWL_EXSTYLE: Int32 = -20
+private let WS_EX_LAYERED: UInt32 = 0x0008_0000
+private let LWA_COLORKEY: UInt32 = 0x0001
+private let LWA_ALPHA: UInt32 = 0x0002
+
+private let SWP_NOSIZE: UInt32 = 0x0001
+private let SWP_NOMOVE: UInt32 = 0x0002
+private let SWP_NOZORDER: UInt32 = 0x0004
+private let SWP_FRAMECHANGED: UInt32 = 0x0020
+
+@_silgen_name("GetWindowLongW")
+private func win32GetWindowLongW(_ hWnd: UnsafeRawPointer?, _ nIndex: Int32) -> Int32
+
+@_silgen_name("SetWindowLongW")
+private func win32SetWindowLongW(_ hWnd: UnsafeRawPointer?, _ nIndex: Int32, _ dwNewLong: Int32) -> Int32
+
+@_silgen_name("SetLayeredWindowAttributes")
+private func win32SetLayeredWindowAttributes(_ hwnd: UnsafeRawPointer?, _ crKey: UInt32, _ bAlpha: UInt8, _ dwFlags: UInt32) -> Int32
+
+@_silgen_name("SetWindowPos")
+private func win32SetWindowPos(
+    _ hWnd: UnsafeRawPointer?,
+    _ hWndInsertAfter: UnsafeRawPointer?,
+    _ X: Int32, _ Y: Int32, _ cx: Int32, _ cy: Int32,
+    _ uFlags: UInt32
+) -> Int32
+
 @_silgen_name("DwmSetWindowAttribute")
 private func win32DwmSetWindowAttribute(
     _ hwnd: UnsafeRawPointer?,
@@ -373,7 +400,7 @@ final class DemoHost {
             let key = Int(wParam)
             switch key {
             case 84: // 'T'
-                toggleTransparency()
+                cycleNextBackgroundMode()
                 return 0
             case 82: // 'R'
                 resetCamera()
@@ -488,19 +515,79 @@ final class DemoHost {
     func mutatePBR(_ body: (inout FilamentPBRSettings) -> Void) { pbr.mutate(body) }
     func resetPBR() { pbr.reset() }
 
-    // MARK: - Transparency
+    // MARK: - Background Modes (Studio Presets, Color-Key Cutout, Vulkan Alpha)
 
-    var isTransparent: Bool {
-        get { hostView?.isTransparent ?? false }
-        set {
-            hostView?.isTransparent = newValue
-            updateWindowTransparency(newValue)
-            controlPanel?.syncTransparency()
+    private(set) var currentBgMode: BackgroundMode = .studioPresets
+    private(set) var currentStudioPreset: StudioPreset = .studioSlate
+    private(set) var currentChromaKey: ChromaKeyPreset = .magenta
+
+    func setBackgroundMode(_ mode: BackgroundMode) {
+        currentBgMode = mode
+        applyBackgroundMode()
+        controlPanel?.syncBackgroundUI()
+    }
+
+    func setStudioPreset(_ preset: StudioPreset) {
+        currentStudioPreset = preset
+        if currentBgMode == .studioPresets {
+            applyBackgroundMode()
         }
     }
 
-    func toggleTransparency() {
-        isTransparent.toggle()
+    func setChromaKey(_ key: ChromaKeyPreset) {
+        currentChromaKey = key
+        if currentBgMode == .colorKeyCutout {
+            applyBackgroundMode()
+        }
+    }
+
+    func cycleNextBackgroundMode() {
+        let all = BackgroundMode.allCases
+        let currentIdx = all.firstIndex(of: currentBgMode) ?? 0
+        let next = all[(currentIdx + 1) % all.count]
+        setBackgroundMode(next)
+    }
+
+    func applyBackgroundMode() {
+        guard let hostView else { return }
+
+        switch currentBgMode {
+        case .studioPresets:
+            disableLayeredWindow()
+            hostView.isTransparent = false
+            updateWindowTransparency(false)
+            let c = currentStudioPreset.color
+            engine.setClearColor(r: c.r, g: c.g, b: c.b, a: 1.0)
+
+        case .colorKeyCutout:
+            hostView.isTransparent = false
+            updateWindowTransparency(false)
+            let rgb = currentChromaKey.rgb
+            engine.setClearColor(r: rgb.r, g: rgb.g, b: rgb.b, a: 1.0)
+            enableLayeredColorKey(currentChromaKey.colorRef)
+
+        case .vulkanAlpha:
+            disableLayeredWindow()
+            hostView.isTransparent = true
+            updateWindowTransparency(true)
+        }
+    }
+
+    private func enableLayeredColorKey(_ colorKey: UInt32) {
+        guard let topHwnd else { return }
+        let exStyle = win32GetWindowLongW(UnsafeRawPointer(topHwnd), GWL_EXSTYLE)
+        _ = win32SetWindowLongW(UnsafeRawPointer(topHwnd), GWL_EXSTYLE, exStyle | Int32(bitPattern: WS_EX_LAYERED))
+        _ = win32SetLayeredWindowAttributes(UnsafeRawPointer(topHwnd), colorKey, 0, LWA_COLORKEY)
+        _ = win32SetWindowPos(UnsafeRawPointer(topHwnd), nil, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+    }
+
+    private func disableLayeredWindow() {
+        guard let topHwnd else { return }
+        let exStyle = win32GetWindowLongW(UnsafeRawPointer(topHwnd), GWL_EXSTYLE)
+        if (UInt32(bitPattern: exStyle) & WS_EX_LAYERED) != 0 {
+            _ = win32SetWindowLongW(UnsafeRawPointer(topHwnd), GWL_EXSTYLE, exStyle & ~Int32(bitPattern: WS_EX_LAYERED))
+            _ = win32SetWindowPos(UnsafeRawPointer(topHwnd), nil, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+        }
     }
 
     private func updateWindowTransparency(_ transparent: Bool) {
@@ -517,6 +604,52 @@ final class DemoHost {
             // DWMSBT_NONE = 1
             var backdrop: UInt32 = 1
             _ = win32DwmSetWindowAttribute(UnsafeRawPointer(topHwnd), 38, &backdrop, 4)
+        }
+    }
+}
+
+enum BackgroundMode: String, CaseIterable {
+    case studioPresets = "Studio Presets (Opaque)"
+    case colorKeyCutout = "Win32 Color-Key Cutout (Desktop Pass-through)"
+    case vulkanAlpha = "Vulkan Alpha + DWM Backdrop"
+}
+
+enum StudioPreset: String, CaseIterable {
+    case studioSlate = "Studio Slate (#1E222A)"
+    case darkCharcoal = "Dark Charcoal (#121316)"
+    case neutralGray = "Neutral Gray (#404040)"
+    case pureBlack = "Pure Black (#000000)"
+    case studioWhite = "Studio White (#F5F5F7)"
+
+    var color: (r: Float, g: Float, b: Float) {
+        switch self {
+        case .studioSlate:   return (0.12, 0.13, 0.16)
+        case .darkCharcoal:  return (0.07, 0.07, 0.09)
+        case .neutralGray:   return (0.25, 0.25, 0.25)
+        case .pureBlack:     return (0.00, 0.00, 0.00)
+        case .studioWhite:   return (0.96, 0.96, 0.97)
+        }
+    }
+}
+
+enum ChromaKeyPreset: String, CaseIterable {
+    case magenta = "Magenta (#FF00FF) — Recommended"
+    case green = "Green (#00FF00)"
+    case black = "Black (#000000)"
+
+    var rgb: (r: Float, g: Float, b: Float) {
+        switch self {
+        case .magenta: return (1.0, 0.0, 1.0)
+        case .green:   return (0.0, 1.0, 0.0)
+        case .black:   return (0.0, 0.0, 0.0)
+        }
+    }
+
+    var colorRef: UInt32 {
+        switch self {
+        case .magenta: return 0x00FF_00FF // B=FF, G=00, R=FF
+        case .green:   return 0x0000_FF00 // B=00, G=FF, R=00
+        case .black:   return 0x0000_0000 // B=00, G=00, R=00
         }
     }
 }

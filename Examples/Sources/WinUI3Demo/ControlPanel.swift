@@ -37,9 +37,13 @@ final class ControlPanel {
     private var modelLabel: TextBlock?
     private var animHeader: TextBlock?
     private var animCombo: ComboBox?
-    private var transparencyToggle: CheckBox?
+    private var bgModeCombo: ComboBox?
+    private var studioPresetCombo: ComboBox?
+    private var chromaKeyCombo: ComboBox?
+    private var bgDescriptionLabel: TextBlock?
     private var autoOrbitToggle: CheckBox?
     private var isSyncingAnimations = false
+    private var isSyncingBackground = false
 
     init(host: DemoHost) {
         self.host = host
@@ -101,18 +105,6 @@ final class ControlPanel {
         addToggle(\.depthOfFieldEnabled, "Depth of field")
 
         addSection("Scene")
-        let transparentCheck = CheckBox()
-        transparentCheck.content = "Transparent background"
-        transparentCheck.isChecked = host.isTransparent
-        transparentCheck.checked.addHandler { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.host.isTransparent = true }
-        }
-        transparentCheck.unchecked.addHandler { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.host.isTransparent = false }
-        }
-        root.children.append(transparentCheck)
-        self.transparencyToggle = transparentCheck
-
         let orbitCheck = CheckBox()
         orbitCheck.content = "Auto-orbit camera"
         orbitCheck.isChecked = host.camera.isAutoOrbiting
@@ -142,8 +134,76 @@ final class ControlPanel {
         }
         root.children.append(reset)
 
+        addBackgroundSection()
+
         syncFromSettings()
         syncModelAndAnimations()
+    }
+
+    private func addBackgroundSection() {
+        addSection("Background Mode")
+
+        let modeCombo = ComboBox()
+        for mode in BackgroundMode.allCases {
+            let item = ComboBoxItem()
+            item.content = mode.rawValue
+            modeCombo.items.append(item)
+        }
+        modeCombo.selectedIndex = Int32(BackgroundMode.allCases.firstIndex(of: host.currentBgMode) ?? 0)
+        modeCombo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingBackground else { return }
+                let idx = Int(modeCombo.selectedIndex)
+                guard idx >= 0, idx < BackgroundMode.allCases.count else { return }
+                self.host.setBackgroundMode(BackgroundMode.allCases[idx])
+            }
+        }
+        root.children.append(modeCombo)
+        self.bgModeCombo = modeCombo
+
+        let studioCombo = ComboBox()
+        for preset in StudioPreset.allCases {
+            let item = ComboBoxItem()
+            item.content = preset.rawValue
+            studioCombo.items.append(item)
+        }
+        studioCombo.selectedIndex = Int32(StudioPreset.allCases.firstIndex(of: host.currentStudioPreset) ?? 0)
+        studioCombo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingBackground else { return }
+                let idx = Int(studioCombo.selectedIndex)
+                guard idx >= 0, idx < StudioPreset.allCases.count else { return }
+                self.host.setStudioPreset(StudioPreset.allCases[idx])
+            }
+        }
+        root.children.append(studioCombo)
+        self.studioPresetCombo = studioCombo
+
+        let chromaCombo = ComboBox()
+        for key in ChromaKeyPreset.allCases {
+            let item = ComboBoxItem()
+            item.content = key.rawValue
+            chromaCombo.items.append(item)
+        }
+        chromaCombo.selectedIndex = Int32(ChromaKeyPreset.allCases.firstIndex(of: host.currentChromaKey) ?? 0)
+        chromaCombo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingBackground else { return }
+                let idx = Int(chromaCombo.selectedIndex)
+                guard idx >= 0, idx < ChromaKeyPreset.allCases.count else { return }
+                self.host.setChromaKey(ChromaKeyPreset.allCases[idx])
+            }
+        }
+        root.children.append(chromaCombo)
+        self.chromaKeyCombo = chromaCombo
+
+        let desc = TextBlock()
+        desc.textWrapping = .wrap
+        desc.fontSize = 12
+        desc.foreground = SolidColorBrush(UWP.Color(a: 255, r: 160, g: 165, b: 175))
+        desc.margin = WinUI.Thickness(left: 0, top: 4, right: 0, bottom: 4)
+        root.children.append(desc)
+        self.bgDescriptionLabel = desc
     }
 
     private func addSection(_ text: String) {
@@ -314,12 +374,38 @@ final class ControlPanel {
            let index = FilamentAntiAliasing.allCases.firstIndex(of: settings.antiAliasing) {
             antiAliasingCombo.selectedIndex = Int32(index)
         }
-        syncTransparency()
+        syncBackgroundUI()
         syncAutoOrbit()
     }
 
-    func syncTransparency() {
-        transparencyToggle?.isChecked = host.isTransparent
+    func syncBackgroundUI() {
+        isSyncingBackground = true
+        defer { isSyncingBackground = false }
+
+        if let bgModeCombo {
+            bgModeCombo.selectedIndex = Int32(BackgroundMode.allCases.firstIndex(of: host.currentBgMode) ?? 0)
+        }
+        if let studioPresetCombo {
+            studioPresetCombo.selectedIndex = Int32(StudioPreset.allCases.firstIndex(of: host.currentStudioPreset) ?? 0)
+        }
+        if let chromaKeyCombo {
+            chromaKeyCombo.selectedIndex = Int32(ChromaKeyPreset.allCases.firstIndex(of: host.currentChromaKey) ?? 0)
+        }
+
+        switch host.currentBgMode {
+        case .studioPresets:
+            studioPresetCombo?.visibility = .visible
+            chromaKeyCombo?.visibility = .collapsed
+            bgDescriptionLabel?.text = "Solid studio backdrop via Filament clear color. Cleanest anti-aliasing and shading without alpha artifacts."
+        case .colorKeyCutout:
+            studioPresetCombo?.visibility = .collapsed
+            chromaKeyCombo?.visibility = .visible
+            bgDescriptionLabel?.text = "Win32 WS_EX_LAYERED + LWA_COLORKEY chroma cutout. The background is physically cut out by DWM, letting your desktop show through!"
+        case .vulkanAlpha:
+            studioPresetCombo?.visibility = .collapsed
+            chromaKeyCombo?.visibility = .collapsed
+            bgDescriptionLabel?.text = "Filament CONFIG_TRANSPARENT + DWM Acrylic backdrop. Major Windows GPU drivers (NVIDIA/AMD) composite desktop Vulkan swapchains as opaque black due to driver VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR enforcement."
+        }
     }
 
     func syncAutoOrbit() {
