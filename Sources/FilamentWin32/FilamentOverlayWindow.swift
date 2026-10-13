@@ -208,9 +208,10 @@ public final class FilamentOverlayWindow {
 
     deinit {
         let eng = engine
-        let (sc, mdc, bmp, old, wnd) = storage.detach()
+        let storage = storage
 
         FilamentMainActor.perform {
+            let (sc, mdc, bmp, old, wnd) = storage.detach()
             if let wnd {
                 _ = win32DestroyWindow(UnsafeRawPointer(wnd))
             }
