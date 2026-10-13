@@ -134,7 +134,7 @@ let filamentLibraryNames = [
     "filament", "backend", "bluevk", "bluegl", "filabridge", "filaflat",
     "utils", "geometry", "smol-v", "ibl", "gltfio", "gltfio_core", "dracodec",
     "basis_transcoder", "meshoptimizer", "uberarchive", "uberzlib",
-    "zstd", "stb", "ktxreader",
+    "zstd", "stb", "ktxreader", "image", "abseil",
 ]
 
 #if os(Windows)
@@ -152,13 +152,20 @@ let filamentLinkerSettings: [LinkerSetting] = [
     .linkedLibrary("shell32"),
 ]
 #elseif os(Linux)
-let filamentStaticLibs: [String] = filamentLibraryNames.map { "\(libDir)/lib\($0).a" }
+let linuxStaticLibs: [String] = {
+    var libs = filamentLibraryNames
+    let webgpuPath = "\(libDir)/libwebgpu_dawn.a"
+    if FileManager.default.fileExists(atPath: webgpuPath) {
+        libs.append("webgpu_dawn")
+    }
+    return libs.map { "\(libDir)/lib\($0).a" }
+}()
 let filamentLinkerSettings: [LinkerSetting] = [
     .linkedLibrary("c++"),
     .linkedLibrary("c++abi"),
     .linkedLibrary("pthread"),
     .linkedLibrary("dl"),
-    .unsafeFlags(filamentStaticLibs),
+    .unsafeFlags(["-Wl,--start-group"] + linuxStaticLibs + ["-Wl,--end-group"]),
 ]
 #else
 let filamentStaticLibs: [String] = filamentLibraryNames.map { "\(libDir)/lib\($0).a" }

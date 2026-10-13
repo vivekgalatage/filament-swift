@@ -61,6 +61,8 @@ cc_library(
         "{lib_dir}/libgeometry.a",
         "{lib_dir}/libsmol-v.a",
         "{lib_dir}/libibl.a",
+        "{lib_dir}/libimage.a",
+        "{lib_dir}/libabseil.a",
     ],
     linkopts = [
         "-framework", "Metal",
@@ -137,6 +139,9 @@ cc_library(
         "{lib_dir}/libgeometry.a",
         "{lib_dir}/libsmol-v.a",
         "{lib_dir}/libibl.a",
+        "{lib_dir}/libimage.a",
+        "{lib_dir}/libabseil.a",
+        "{lib_dir}/libwebgpu_dawn.a",
     ],
     linkopts = [
         "-lpthread",
@@ -212,6 +217,8 @@ cc_library(
         "{lib_dir}/geometry.lib",
         "{lib_dir}/smol-v.lib",
         "{lib_dir}/ibl.lib",
+        "{lib_dir}/image.lib",
+        "{lib_dir}/abseil.lib",
     ],
     linkopts = [
         "gdi32.lib",
