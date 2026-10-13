@@ -21,6 +21,7 @@ import FilamentWin32
 private let WM_DESTROY: UInt32 = 0x0002
 private let WM_SIZE: UInt32 = 0x0005
 private let WM_QUIT: UInt32 = 0x0012
+private let WM_ERASEBKGND: UInt32 = 0x0014
 private let WM_MOUSEMOVE: UInt32 = 0x0200
 private let WM_LBUTTONDOWN: UInt32 = 0x0201
 private let WM_LBUTTONUP: UInt32 = 0x0202
@@ -77,6 +78,14 @@ private func win32ReleaseCapture() -> Int32
 @_silgen_name("SetFocus")
 private func win32SetFocus(_ hWnd: UnsafeRawPointer?) -> UnsafeRawPointer?
 
+@_silgen_name("DwmSetWindowAttribute")
+private func win32DwmSetWindowAttribute(
+    _ hwnd: UnsafeRawPointer?,
+    _ dwAttribute: UInt32,
+    _ pvAttribute: UnsafeRawPointer,
+    _ cbAttribute: UInt32
+) -> Int32
+
 /// Main-actor-isolated host managing the Win32 windows, XAML island, and Filament scene.
 @MainActor
 final class DemoHost {
@@ -100,7 +109,7 @@ final class DemoHost {
     private(set) var topHwnd: HWND!
     private var renderChild: HWND?
     private var panelChild: HWND?
-    private var panelWidth: Int32 = 320
+    private var panelWidth: Int32 = 340
 
     /// The XAML island hosting the control panel, and its retained Swift controller.
     private var winuiApp: DemoApplication?
@@ -159,12 +168,14 @@ final class DemoHost {
                 guard let hwnd = CreateWindowExW(
                     0, classWide, titleWide,
                     DWORD(WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN),
-                    CW_USEDEFAULT, CW_USEDEFAULT, 1180, 780,
+                    CW_USEDEFAULT, CW_USEDEFAULT, 1220, 820,
                     nil, nil, hInstance, nil
                 ) else {
                     fatalError("[WinUI3Demo] Failed to create the top-level window")
                 }
                 topHwnd = hwnd
+                var useDarkMode: Int32 = 1
+                _ = win32DwmSetWindowAttribute(UnsafeRawPointer(hwnd), 20, &useDarkMode, 4)
                 _ = ShowWindow(hwnd, SW_SHOW)
                 _ = UpdateWindow(hwnd)
             }
@@ -175,7 +186,7 @@ final class DemoHost {
                             0, 0, 100, 100, topHwnd, nil, GetModuleHandleW(nil), nil)
         }
         panelChild = panelClassName.withCString(encodedAs: UTF16.self) { wide in
-            CreateWindowExW(0, wide, nil, DWORD(WS_CHILD | WS_VISIBLE),
+            CreateWindowExW(0, wide, nil, DWORD(WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS),
                             0, 0, Int32(panelWidth), 100, topHwnd, nil, GetModuleHandleW(nil), nil)
         }
 
@@ -211,10 +222,11 @@ final class DemoHost {
     }
 
     private func layoutChildren() {
+        guard let topHwnd else { return }
         var client = RECT()
         _ = win32GetClientRect(UnsafeRawPointer(topHwnd), &client)
         let width = client.right - client.left
-        let height = client.bottom - client.top
+        let height = max(1, client.bottom - client.top)
         let renderWidth = max(1, width - panelWidth)
 
         if let renderChild {
@@ -222,6 +234,14 @@ final class DemoHost {
         }
         if let panelChild {
             _ = win32MoveWindow(UnsafeRawPointer(panelChild), renderWidth, 0, panelWidth, height, kTrue)
+        }
+        if let bridge = xamlSource?.siteBridge {
+            let bridgeHwndVal = bridge.windowId.value
+            if bridgeHwndVal != 0,
+               let bridgeHwnd = HWND(bitPattern: UInt(truncatingIfNeeded: bridgeHwndVal)) {
+                _ = win32MoveWindow(UnsafeRawPointer(bridgeHwnd), 0, 0, panelWidth, height, kTrue)
+            }
+            try? bridge.moveAndResize(UWP.RectInt32(x: 0, y: 0, width: panelWidth, height: height))
         }
     }
 
@@ -235,6 +255,25 @@ final class DemoHost {
             source.content = panel.rootElement
             controlPanel = panel
             xamlSource = source
+
+            var rect = RECT()
+            _ = win32GetClientRect(UnsafeRawPointer(panelChild), &rect)
+            let w = max(1, rect.right - rect.left)
+            let h = max(1, rect.bottom - rect.top)
+            if let bridge = source.siteBridge {
+                let bridgeHwndVal = bridge.windowId.value
+                if bridgeHwndVal != 0,
+                   let bridgeHwnd = HWND(bitPattern: UInt(truncatingIfNeeded: bridgeHwndVal)) {
+                    _ = win32MoveWindow(UnsafeRawPointer(bridgeHwnd), 0, 0, w, h, kTrue)
+                }
+                try bridge.moveAndResize(UWP.RectInt32(x: 0, y: 0, width: w, height: h))
+                try bridge.show()
+            }
+            if let first = ModelDiscovery.discoverModels().first, currentModelName != nil {
+                panel.syncModelAndAnimations()
+            } else if currentModelName != nil {
+                panel.syncModelAndAnimations()
+            }
         } catch {
             print("[WinUI3Demo] Failed to create the XAML island: \(error)")
         }
@@ -245,11 +284,20 @@ final class DemoHost {
     private func handleMessage(_ hwnd: HWND?, _ msg: UInt32, _ wParam: WPARAM, _ lParam: LPARAM) -> LRESULT {
         switch msg {
         case WM_DESTROY:
-            PostQuitMessage(0)
+            if hwnd == topHwnd {
+                PostQuitMessage(0)
+            }
             return 0
+        case WM_ERASEBKGND:
+            if hwnd == renderChild {
+                return 1
+            }
+            return DefWindowProcW(hwnd, msg, wParam, lParam)
         case WM_SIZE:
-            layoutChildren()
-            hostView?.syncViewportWithWindow()
+            if hwnd == topHwnd, wParam != 1 {
+                layoutChildren()
+                hostView?.syncViewportWithWindow()
+            }
             return 0
         case WM_LBUTTONDOWN, WM_RBUTTONDOWN, WM_MBUTTONDOWN:
             if hwnd == renderChild {

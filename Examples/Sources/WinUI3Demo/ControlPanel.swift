@@ -26,6 +26,7 @@ import Filament
 @MainActor
 final class ControlPanel {
     private let host: DemoHost
+    private let rootBorder = Border()
     private let scrollViewer = ScrollViewer()
     private let root = StackPanel()
 
@@ -43,11 +44,17 @@ final class ControlPanel {
         build()
     }
 
-    var rootElement: UIElement { scrollViewer }
+    var rootElement: UIElement { rootBorder }
 
     // MARK: - Construction
 
     private func build() {
+        rootBorder.requestedTheme = .dark
+        rootBorder.background = SolidColorBrush(UWP.Color(a: 255, r: 28, g: 28, b: 32))
+        rootBorder.borderBrush = SolidColorBrush(UWP.Color(a: 255, r: 52, g: 52, b: 58))
+        rootBorder.borderThickness = WinUI.Thickness(left: 1, top: 0, right: 0, bottom: 0)
+        rootBorder.child = scrollViewer
+
         root.spacing = 8
         root.padding = WinUI.Thickness(left: 16, top: 16, right: 16, bottom: 16)
         scrollViewer.content = root
@@ -59,6 +66,7 @@ final class ControlPanel {
 
         let subtitle = TextBlock()
         subtitle.text = "WinUI 3 island · Vulkan · glTF PBR"
+        subtitle.foreground = SolidColorBrush(UWP.Color(a: 255, r: 165, g: 165, b: 175))
         root.children.append(subtitle)
 
         addSection("Model")

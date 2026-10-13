@@ -14,7 +14,7 @@ final class DemoApplication: Application, IXamlMetadataProvider {
 
     override public init() { super.init() }
 
-    override open func queryInterface(_ iid: WindowsFoundation.IID) -> IUnknownRef? {
+    override public func queryInterface(_ iid: WindowsFoundation.IID) -> IUnknownRef? {
         switch iid {
         case __ABI_Microsoft_UI_Xaml_Markup.IXamlMetadataProviderWrapper.IID:
             let ixmp = __ABI_Microsoft_UI_Xaml_Markup.IXamlMetadataProviderWrapper(self)
@@ -42,6 +42,8 @@ final class DemoApplication: Application, IXamlMetadataProvider {
 enum WinAppSDKBootstrap {
     /// Windows App SDK runtime version handed to `MddBootstrapInitialize2` (0x00010006 == 1.6).
     private static let bootstrapVersion: UInt32 = 0x0001_0006
+    private static var dispatcherQueueController: DispatcherQueueController?
+    private static var xamlManager: WindowsXamlManager?
 
     private static func findBootstrapDLL() -> String? {
         let fm = FileManager.default
@@ -103,10 +105,10 @@ enum WinAppSDKBootstrap {
 
     static func createWinUIApplication() -> DemoApplication? {
         do {
-            _ = try DispatcherQueueController.createOnCurrentThread()
+            dispatcherQueueController = try DispatcherQueueController.createOnCurrentThread()
             DemoApplication.metadataProvider = XamlControlsXamlMetaDataProvider()
             let app = DemoApplication()
-            _ = try WindowsXamlManager.initializeForCurrentThread()
+            xamlManager = try WindowsXamlManager.initializeForCurrentThread()
             app.dispatcherShutdownMode = .onLastWindowClose
             app.resources.mergedDictionaries.append(XamlControlsResources())
             return app
