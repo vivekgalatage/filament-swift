@@ -262,6 +262,36 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
         outlineMaterial?.outlineThickness = thickness
     }
 
+    public func setOutlineGradientMode(_ mode: FilamentToonOutlineMaterial.GradientMode) {
+        ensureMaterials()
+        outlineMaterial?.gradientMode = mode
+    }
+
+    public func setOutlineStops(_ stops: [FilamentToonOutlineMaterial.GradientStop]) {
+        ensureMaterials()
+        outlineMaterial?.stops = stops
+    }
+
+    public func setOutlineGradientScale(_ scale: Float) {
+        ensureMaterials()
+        outlineMaterial?.gradientScale = scale
+    }
+
+    public func setOutlineGradientPhase(_ phase: Float) {
+        ensureMaterials()
+        outlineMaterial?.gradientPhase = phase
+    }
+
+    public func setOutlineFlowSpeed(_ speed: Float) {
+        ensureMaterials()
+        outlineMaterial?.flowAnimationSpeed = speed
+    }
+
+    public func setOutlineNoiseScale(_ noise: Float) {
+        ensureMaterials()
+        outlineMaterial?.noiseScale = noise
+    }
+
     private func applyShadingMode() {
         guard let url = currentModelURL else { return }
         ensureMaterials()
@@ -389,6 +419,11 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
         model.applyMorphWeights()
         if outlineModel.isLoaded && outlineModel.isVisible {
             outlineModel.applyMorphWeights()
+        }
+
+        if let out = outlineMaterial, out.flowAnimationSpeed != 0 {
+            let nextPhase = (out.gradientPhase + dt * out.flowAnimationSpeed).truncatingRemainder(dividingBy: 1.0)
+            out.gradientPhase = nextPhase >= 0 ? nextPhase : (nextPhase + 1.0)
         }
 
         camera.update(dt: dt)

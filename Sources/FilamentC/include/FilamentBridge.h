@@ -207,6 +207,7 @@ namespace FilamentBridge {
     filament::MaterialInstance* createMaterialInstance(filament::Material* material);
     void destroyMaterialInstance(filament::Engine* engine, filament::MaterialInstance* instance);
 
+    void setMaterialParameterInt(filament::MaterialInstance* inst, const char* name, int32_t v);
     void setMaterialParameterFloat(filament::MaterialInstance* inst, const char* name, float v);
     void setMaterialParameterFloat3(filament::MaterialInstance* inst, const char* name, float x, float y, float z);
     void setMaterialParameterFloat4(filament::MaterialInstance* inst, const char* name, float x, float y, float z, float w);

@@ -64,6 +64,60 @@ final class FilamentToonTests: XCTestCase {
     }
 
     @MainActor
+    func testToonOutlineMultiColorAndGradientStops() throws {
+        let engine = FilamentEngine(backend: .metal)
+        let outlineURL = URL(fileURLWithPath: "Resources/Materials/ToonOutline.filamat")
+        guard FileManager.default.fileExists(atPath: outlineURL.path) else { return }
+
+        let outlineMaterial = try engine.createOutlineMaterial(from: outlineURL)
+
+        // Test Gradient Modes
+        for mode in FilamentToonOutlineMaterial.GradientMode.allCases {
+            outlineMaterial.gradientMode = mode
+            XCTAssertEqual(outlineMaterial.gradientMode, mode)
+        }
+
+        // Test VIBGYOR stops preset
+        outlineMaterial.stops = FilamentToonOutlineMaterial.vibgyorStops
+        XCTAssertEqual(outlineMaterial.stops.count, 7)
+        XCTAssertEqual(outlineMaterial.stops.first?.position, 0.0)
+        XCTAssertEqual(outlineMaterial.stops.last?.position, 1.0)
+
+        // Test addStop
+        let added = outlineMaterial.addStop(color: (0.9, 0.8, 0.1, 1.0), position: 0.45)
+        XCTAssertTrue(added)
+        XCTAssertEqual(outlineMaterial.stops.count, 8)
+
+        // Cannot add beyond 8 stops
+        let rejected = outlineMaterial.addStop()
+        XCTAssertFalse(rejected)
+
+        // Test removeStop
+        let removed = outlineMaterial.removeStop(at: 3)
+        XCTAssertTrue(removed)
+        XCTAssertEqual(outlineMaterial.stops.count, 7)
+
+        // Test random stops generator
+        let randomStops = FilamentToonOutlineMaterial.generateRandomStops(count: 5)
+        XCTAssertEqual(randomStops.count, 5)
+        outlineMaterial.stops = randomStops
+
+        // Test randomizeColors
+        outlineMaterial.randomizeColors()
+        XCTAssertEqual(outlineMaterial.stops.count, 5)
+
+        // Test scales and flow speed
+        outlineMaterial.gradientScale = 2.5
+        outlineMaterial.gradientPhase = 0.35
+        outlineMaterial.flowAnimationSpeed = 1.0
+        outlineMaterial.noiseScale = 8.0
+        XCTAssertEqual(outlineMaterial.gradientScale, 2.5)
+        XCTAssertEqual(outlineMaterial.gradientPhase, 0.35)
+        XCTAssertEqual(outlineMaterial.flowAnimationSpeed, 1.0)
+        XCTAssertEqual(outlineMaterial.noiseScale, 8.0)
+    }
+
+    @MainActor
     func testDepthMaskMaterialLifecycle() throws {
         let engine = FilamentEngine(backend: .metal)
         let maskURL = URL(fileURLWithPath: "Resources/Materials/DepthMask.filamat")

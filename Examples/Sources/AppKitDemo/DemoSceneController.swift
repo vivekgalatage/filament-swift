@@ -336,6 +336,82 @@ final class DemoSceneController {
         overlayWindow?.setOutlineColor(r: r, g: g, b: b, a: 1.0)
     }
 
+    func setOutlineGradientMode(_ mode: FilamentToonOutlineMaterial.GradientMode) {
+        ensureToonMaterials()
+        outlineMaterial?.gradientMode = mode
+        overlayWindow?.setOutlineGradientMode(mode)
+    }
+
+    func setOutlineStops(_ stops: [FilamentToonOutlineMaterial.GradientStop]) {
+        ensureToonMaterials()
+        outlineMaterial?.stops = stops
+        overlayWindow?.setOutlineStops(stops)
+    }
+
+    @discardableResult
+    func addOutlineStop(color: (Float, Float, Float, Float)? = nil, position: Float? = nil) -> Bool {
+        ensureToonMaterials()
+        guard let out = outlineMaterial else { return false }
+        let ok = out.addStop(color: color, position: position)
+        if ok {
+            overlayWindow?.setOutlineStops(out.stops)
+        }
+        return ok
+    }
+
+    @discardableResult
+    func removeOutlineStop(at index: Int) -> Bool {
+        ensureToonMaterials()
+        guard let out = outlineMaterial else { return false }
+        let ok = out.removeStop(at: index)
+        if ok {
+            overlayWindow?.setOutlineStops(out.stops)
+        }
+        return ok
+    }
+
+    func updateOutlineStop(at index: Int, r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureToonMaterials()
+        outlineMaterial?.setStopColor(at: index, r: r, g: g, b: b, a: a)
+        if let stops = outlineMaterial?.stops {
+            overlayWindow?.setOutlineStops(stops)
+        }
+    }
+
+    func updateOutlineStopPosition(at index: Int, position: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.setStopPosition(at: index, position: position)
+        if let stops = outlineMaterial?.stops {
+            overlayWindow?.setOutlineStops(stops)
+        }
+    }
+
+    func randomizeOutlineColors() {
+        ensureToonMaterials()
+        outlineMaterial?.randomizeColors()
+        if let stops = outlineMaterial?.stops {
+            overlayWindow?.setOutlineStops(stops)
+        }
+    }
+
+    func setOutlineGradientScale(_ scale: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.gradientScale = scale
+        overlayWindow?.setOutlineGradientScale(scale)
+    }
+
+    func setOutlineFlowSpeed(_ speed: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.flowAnimationSpeed = speed
+        overlayWindow?.setOutlineFlowSpeed(speed)
+    }
+
+    func setOutlineNoiseScale(_ noise: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.noiseScale = noise
+        overlayWindow?.setOutlineNoiseScale(noise)
+    }
+
     // MARK: - Morph Target controls
 
     func setMorphWeight(at index: Int, weight: Float) {
@@ -418,6 +494,11 @@ final class DemoSceneController {
         overlay.setOutlineColor(r: currentOutlineColor.r, g: currentOutlineColor.g, b: currentOutlineColor.b, a: 1.0)
         if let outline = outlineMaterial {
             overlay.setOutlineThickness(outline.outlineThickness)
+            overlay.setOutlineGradientMode(outline.gradientMode)
+            overlay.setOutlineStops(outline.stops)
+            overlay.setOutlineGradientScale(outline.gradientScale)
+            overlay.setOutlineFlowSpeed(outline.flowAnimationSpeed)
+            overlay.setOutlineNoiseScale(outline.noiseScale)
         }
         overlay.show()
         overlayWindow = overlay
@@ -474,6 +555,11 @@ final class DemoSceneController {
         model.applyMorphWeights()
         if outlineModel.isLoaded && outlineModel.isVisible {
             outlineModel.applyMorphWeights()
+        }
+
+        if let out = outlineMaterial, out.flowAnimationSpeed != 0 {
+            let nextPhase = (out.gradientPhase + dt * out.flowAnimationSpeed).truncatingRemainder(dividingBy: 1.0)
+            out.gradientPhase = nextPhase >= 0 ? nextPhase : (nextPhase + 1.0)
         }
 
         camera.update(dt: dt)

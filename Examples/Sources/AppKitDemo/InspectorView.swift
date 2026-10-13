@@ -34,6 +34,15 @@ final class InspectorView: NSObject {
     private var overlayButton: NSButton?
     private var overlayLabel: NSTextField?
 
+    private var solidColorRow: NSView!
+    private var gradientControlsContainer: NSStackView!
+    private var gradientStopsList: NSStackView!
+    private var addStopButton: NSButton!
+    private var gradientPresetPopup: NSPopUpButton!
+    private var outlineStylePopup: NSPopUpButton!
+    private var currentOutlineGradientMode: FilamentToonOutlineMaterial.GradientMode = .solid
+    private var currentGradientStops: [FilamentToonOutlineMaterial.GradientStop] = FilamentToonOutlineMaterial.vibgyorStops
+
     private struct OutlineColorPreset {
         let name: String
         let color: (r: Float, g: Float, b: Float)
@@ -278,7 +287,7 @@ final class InspectorView: NSObject {
             self?.scene.setOutlineThickness(Float(val))
         }
 
-        addOutlineColorRow(to: stack)
+        addOutlineStyleAndColorSection(to: stack)
 
         addPopup(to: stack, title: "Canvas",
                  items: DemoSceneController.CanvasBackground.allCases.map(\.title),
@@ -288,18 +297,39 @@ final class InspectorView: NSObject {
         }
     }
 
-    private func addOutlineColorRow(to stack: NSStackView) {
-        let row = NSStackView()
-        row.translatesAutoresizingMaskIntoConstraints = false
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.distribution = .fill
-        row.spacing = 6.0
+    private func addOutlineStyleAndColorSection(to stack: NSStackView) {
+        // 1. Outline Style / Pattern Dropdown
+        let stylePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for mode in FilamentToonOutlineMaterial.GradientMode.allCases {
+            stylePopup.addItem(withTitle: mode.title)
+        }
+        stylePopup.selectItem(at: 0)
+        stylePopup.controlSize = .small
+        stylePopup.target = self
+        stylePopup.action = #selector(onOutlineStyleChanged(_:))
+        stylePopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let styleRow = NSStackView(views: [
+            NSTextField(labelWithString: "Outline style"),
+            stylePopup
+        ])
+        styleRow.orientation = .horizontal
+        styleRow.distribution = .fill
+        stack.addArrangedSubview(styleRow)
+        self.outlineStylePopup = stylePopup
+
+        // 2. Solid Color Row (Visible when mode == .solid)
+        let solidRow = NSStackView()
+        solidRow.translatesAutoresizingMaskIntoConstraints = false
+        solidRow.orientation = .horizontal
+        solidRow.alignment = .centerY
+        solidRow.distribution = .fill
+        solidRow.spacing = 6.0
 
         let label = NSTextField(labelWithString: "Outline color")
         label.font = NSFont.systemFont(ofSize: 11, weight: .regular)
         label.setContentHuggingPriority(.required, for: .horizontal)
-        row.addArrangedSubview(label)
+        solidRow.addArrangedSubview(label)
 
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         for preset in outlineColorPresets {
@@ -311,7 +341,7 @@ final class InspectorView: NSObject {
         popup.target = self
         popup.action = #selector(onOutlineColorPopupChanged(_:))
         popup.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        row.addArrangedSubview(popup)
+        solidRow.addArrangedSubview(popup)
         outlineColorPopup = popup
 
         let well = NSColorWell()
@@ -325,13 +355,165 @@ final class InspectorView: NSObject {
             well.widthAnchor.constraint(equalToConstant: 28),
             well.heightAnchor.constraint(equalToConstant: 20),
         ])
-        row.addArrangedSubview(well)
+        solidRow.addArrangedSubview(well)
         outlineColorWell = well
 
-        stack.addArrangedSubview(row)
+        stack.addArrangedSubview(solidRow)
         NSLayoutConstraint.activate([
-            row.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            solidRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
+        self.solidColorRow = solidRow
+
+        // 3. Gradient & Multi-Color Controls Container (Visible when mode != .solid)
+        let gradContainer = NSStackView()
+        gradContainer.translatesAutoresizingMaskIntoConstraints = false
+        gradContainer.orientation = .vertical
+        gradContainer.alignment = .leading
+        gradContainer.spacing = 6.0
+        gradContainer.isHidden = true
+
+        // Preset row
+        let presetPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        presetPopup.addItems(withTitles: [
+            "VIBGYOR Rainbow (7 stops)",
+            "Cyberpunk Synthwave",
+            "Sunset Flare",
+            "Aurora Borealis",
+            "Random 4-Stop"
+        ])
+        presetPopup.selectItem(at: 0)
+        presetPopup.controlSize = .small
+        presetPopup.target = self
+        presetPopup.action = #selector(onGradientPresetChanged(_:))
+        presetPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let presetRow = NSStackView(views: [
+            NSTextField(labelWithString: "Palette preset"),
+            presetPopup
+        ])
+        presetRow.orientation = .horizontal
+        presetRow.distribution = .fill
+        gradContainer.addArrangedSubview(presetRow)
+        self.gradientPresetPopup = presetPopup
+
+        // Action Buttons: + Add Stop & Randomize Colors
+        let actionRow = NSStackView()
+        actionRow.orientation = .horizontal
+        actionRow.alignment = .centerY
+        actionRow.distribution = .fillEqually
+        actionRow.spacing = 8.0
+
+        let addBtn = NSButton(title: "+ Add Stop", target: self, action: #selector(onAddGradientStopClicked))
+        addBtn.bezelStyle = .rounded
+        addBtn.controlSize = .small
+        actionRow.addArrangedSubview(addBtn)
+        self.addStopButton = addBtn
+
+        let randBtn = NSButton(title: "🎲 Randomize", target: self, action: #selector(onRandomizeColorsClicked))
+        randBtn.bezelStyle = .rounded
+        randBtn.controlSize = .small
+        actionRow.addArrangedSubview(randBtn)
+
+        gradContainer.addArrangedSubview(actionRow)
+
+        // Stops list container
+        let stopsList = NSStackView()
+        stopsList.translatesAutoresizingMaskIntoConstraints = false
+        stopsList.orientation = .vertical
+        stopsList.alignment = .leading
+        stopsList.spacing = 4.0
+        gradContainer.addArrangedSubview(stopsList)
+        self.gradientStopsList = stopsList
+
+        // Cycles / Frequency slider
+        addSlider(to: gradContainer, title: "Cycles / Scale", range: 0.2...5.0, value: 1.0,
+                  format: { String(format: "%.1fx", $0) }) { [weak self] val in
+            self?.scene.setOutlineGradientScale(Float(val))
+        }
+
+        // Flow Animation Speed slider
+        addSlider(to: gradContainer, title: "Flow speed", range: 0.0...2.0, value: 0.0,
+                  format: { $0 == 0 ? "Static" : String(format: "%.2fx", $0) }) { [weak self] val in
+            self?.scene.setOutlineFlowSpeed(Float(val))
+        }
+
+        stack.addArrangedSubview(gradContainer)
+        NSLayoutConstraint.activate([
+            gradContainer.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            presetRow.widthAnchor.constraint(equalTo: gradContainer.widthAnchor),
+            actionRow.widthAnchor.constraint(equalTo: gradContainer.widthAnchor),
+            stopsList.widthAnchor.constraint(equalTo: gradContainer.widthAnchor),
+        ])
+        self.gradientControlsContainer = gradContainer
+
+        rebuildGradientStopsUI()
+    }
+
+    private func rebuildGradientStopsUI() {
+        guard let list = gradientStopsList else { return }
+        for view in list.arrangedSubviews {
+            list.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        addStopButton?.isEnabled = currentGradientStops.count < 8
+
+        for (index, stop) in currentGradientStops.enumerated() {
+            let row = NSStackView()
+            row.translatesAutoresizingMaskIntoConstraints = false
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.distribution = .fill
+            row.spacing = 5.0
+
+            let numLabel = NSTextField(labelWithString: "#\(index + 1)")
+            numLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold)
+            numLabel.textColor = .secondaryLabelColor
+            numLabel.setContentHuggingPriority(.required, for: .horizontal)
+            row.addArrangedSubview(numLabel)
+
+            let well = NSColorWell()
+            well.translatesAutoresizingMaskIntoConstraints = false
+            well.color = NSColor(srgbRed: CGFloat(stop.color.r), green: CGFloat(stop.color.g), blue: CGFloat(stop.color.b), alpha: 1.0)
+            well.tag = index
+            well.target = self
+            well.action = #selector(onGradientStopColorWellChanged(_:))
+            well.controlSize = .small
+            NSLayoutConstraint.activate([
+                well.widthAnchor.constraint(equalToConstant: 24),
+                well.heightAnchor.constraint(equalToConstant: 18),
+            ])
+            row.addArrangedSubview(well)
+
+            let slider = NSSlider(value: Double(stop.position), minValue: 0.0, maxValue: 1.0, target: self, action: #selector(onGradientStopSliderChanged(_:)))
+            slider.tag = index
+            slider.controlSize = .mini
+            slider.isContinuous = true
+            slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            row.addArrangedSubview(slider)
+
+            let valLabel = NSTextField(labelWithString: String(format: "%.2f", stop.position))
+            valLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+            valLabel.textColor = .secondaryLabelColor
+            valLabel.alignment = .right
+            valLabel.setContentHuggingPriority(.required, for: .horizontal)
+            row.addArrangedSubview(valLabel)
+
+            let deleteBtn = NSButton(title: "✕", target: self, action: #selector(onDeleteGradientStopClicked(_:)))
+            deleteBtn.tag = index
+            deleteBtn.bezelStyle = .circular
+            deleteBtn.controlSize = .mini
+            deleteBtn.isBordered = false
+            deleteBtn.font = NSFont.systemFont(ofSize: 9, weight: .bold)
+            deleteBtn.toolTip = "Delete Stop"
+            deleteBtn.isEnabled = currentGradientStops.count > 2
+            row.addArrangedSubview(deleteBtn)
+
+            list.addArrangedSubview(row)
+            NSLayoutConstraint.activate([
+                row.widthAnchor.constraint(equalTo: list.widthAnchor),
+            ])
+        }
     }
 
     private func addMorphTargetsSection(to stack: NSStackView) {
@@ -998,5 +1180,100 @@ final class InspectorView: NSObject {
         } else {
             outlineColorPopup?.selectItem(withTitle: "Custom…")
         }
+    }
+
+    // MARK: - Gradient & Multi-Color Actions
+
+    @objc private func onOutlineStyleChanged(_ sender: NSPopUpButton) {
+        guard let mode = FilamentToonOutlineMaterial.GradientMode(rawValue: Int32(sender.indexOfSelectedItem)) else { return }
+        setOutlineGradientMode(mode)
+    }
+
+    func setOutlineGradientMode(_ mode: FilamentToonOutlineMaterial.GradientMode) {
+        currentOutlineGradientMode = mode
+        scene.setOutlineGradientMode(mode)
+        outlineStylePopup?.selectItem(at: Int(mode.rawValue))
+        solidColorRow?.isHidden = (mode != .solid)
+        gradientControlsContainer?.isHidden = (mode == .solid)
+    }
+
+    func applyVibgyorPalette() {
+        setOutlineGradientMode(.vertical)
+        currentGradientStops = FilamentToonOutlineMaterial.vibgyorStops
+        scene.setOutlineStops(currentGradientStops)
+        rebuildGradientStopsUI()
+    }
+
+    @objc private func onGradientPresetChanged(_ sender: NSPopUpButton) {
+        switch sender.indexOfSelectedItem {
+        case 0:
+            currentGradientStops = FilamentToonOutlineMaterial.vibgyorStops
+        case 1:
+            currentGradientStops = FilamentToonOutlineMaterial.synthwaveStops
+        case 2:
+            currentGradientStops = FilamentToonOutlineMaterial.sunsetStops
+        case 3:
+            currentGradientStops = FilamentToonOutlineMaterial.auroraStops
+        case 4:
+            currentGradientStops = FilamentToonOutlineMaterial.generateRandomStops(count: 4)
+        default: break
+        }
+        scene.setOutlineStops(currentGradientStops)
+        rebuildGradientStopsUI()
+    }
+
+    @objc func onAddGradientStopClicked() {
+        guard currentGradientStops.count < 8 else { return }
+        let randomColor: (Float, Float, Float, Float) = (Float.random(in: 0.2...1.0), Float.random(in: 0.2...1.0), Float.random(in: 0.2...1.0), 1.0)
+        let lastPos = currentGradientStops.last?.position ?? 0.8
+        let newPos: Float = min(1.0, lastPos + 0.1)
+        currentGradientStops.append(FilamentToonOutlineMaterial.GradientStop(position: newPos, color: randomColor))
+        currentGradientStops.sort { $0.position < $1.position }
+        scene.setOutlineStops(currentGradientStops)
+        rebuildGradientStopsUI()
+    }
+
+    @objc func onRandomizeColorsClicked() {
+        for i in 0..<currentGradientStops.count {
+            let r = Float.random(in: 0.15...1.0)
+            let g = Float.random(in: 0.15...1.0)
+            let b = Float.random(in: 0.15...1.0)
+            currentGradientStops[i].color = (r, g, b, 1.0)
+        }
+        scene.setOutlineStops(currentGradientStops)
+        rebuildGradientStopsUI()
+    }
+
+    @objc private func onGradientStopColorWellChanged(_ sender: NSColorWell) {
+        let index = sender.tag
+        guard index >= 0 && index < currentGradientStops.count else { return }
+        let c = sender.color.usingColorSpace(.sRGB) ?? sender.color
+        let r = Float(c.redComponent)
+        let g = Float(c.greenComponent)
+        let b = Float(c.blueComponent)
+        currentGradientStops[index].color = (r, g, b, 1.0)
+        scene.updateOutlineStop(at: index, r: r, g: g, b: b)
+    }
+
+    @objc private func onGradientStopSliderChanged(_ sender: NSSlider) {
+        let index = sender.tag
+        guard index >= 0 && index < currentGradientStops.count else { return }
+        let pos = Float(sender.doubleValue)
+        currentGradientStops[index].position = pos
+        scene.updateOutlineStopPosition(at: index, position: pos)
+
+        if let row = sender.superview as? NSStackView,
+           row.arrangedSubviews.count >= 4,
+           let valLabel = row.arrangedSubviews[3] as? NSTextField {
+            valLabel.stringValue = String(format: "%.2f", pos)
+        }
+    }
+
+    @objc private func onDeleteGradientStopClicked(_ sender: NSButton) {
+        let index = sender.tag
+        guard currentGradientStops.count > 2, index >= 0 && index < currentGradientStops.count else { return }
+        currentGradientStops.remove(at: index)
+        scene.removeOutlineStop(at: index)
+        rebuildGradientStopsUI()
     }
 }

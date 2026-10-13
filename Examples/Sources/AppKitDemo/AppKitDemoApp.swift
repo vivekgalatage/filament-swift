@@ -118,9 +118,31 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         outlineColorMenu.addItem(NSMenuItem(title: "Crimson Inked", action: #selector(outlineColorCrimsonClicked), keyEquivalent: ""))
         outlineColorMenu.addItem(NSMenuItem(title: "Chalk White", action: #selector(outlineColorWhiteClicked), keyEquivalent: ""))
         outlineColorMenu.addItem(NSMenuItem(title: "Neon Cyan", action: #selector(outlineColorCyanClicked), keyEquivalent: ""))
-        let outlineColorItem = NSMenuItem(title: "Outline Color", action: nil, keyEquivalent: "")
+        let outlineColorItem = NSMenuItem(title: "Solid Outline Color", action: nil, keyEquivalent: "")
         outlineColorItem.submenu = outlineColorMenu
         shadingMenu.addItem(outlineColorItem)
+
+        let outlineStyleMenu = NSMenu(title: "Outline Pattern & Gradient")
+        outlineStyleMenu.addItem(NSMenuItem(title: "Solid Single Color", action: #selector(outlineStyleSolidClicked), keyEquivalent: ""))
+        outlineStyleMenu.addItem(NSMenuItem(title: "Vertical Height Gradient", action: #selector(outlineStyleVerticalClicked), keyEquivalent: ""))
+        outlineStyleMenu.addItem(NSMenuItem(title: "Radial Angle Gradient (360°)", action: #selector(outlineStyleRadialClicked), keyEquivalent: ""))
+        outlineStyleMenu.addItem(NSMenuItem(title: "VIBGYOR Rainbow Spectrum", action: #selector(outlineStyleRainbowClicked), keyEquivalent: ""))
+        outlineStyleMenu.addItem(NSMenuItem(title: "Random Multi-Color Facets", action: #selector(outlineStyleFacetsClicked), keyEquivalent: ""))
+        let outlineStyleItem = NSMenuItem(title: "Outline Pattern & Gradient", action: nil, keyEquivalent: "")
+        outlineStyleItem.submenu = outlineStyleMenu
+        shadingMenu.addItem(outlineStyleItem)
+
+        shadingMenu.addItem(NSMenuItem.separator())
+        shadingMenu.addItem(NSMenuItem(
+            title: "🎲 Randomize Outline Colors",
+            action: #selector(randomizeOutlineColorsMenuClicked),
+            keyEquivalent: "k"
+        ))
+        shadingMenu.addItem(NSMenuItem(
+            title: "Apply VIBGYOR Rainbow Palette",
+            action: #selector(vibgyorPaletteMenuClicked),
+            keyEquivalent: ""
+        ))
 
         let shadingItem = NSMenuItem()
         shadingItem.submenu = shadingMenu
@@ -246,6 +268,16 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     @objc private func outlineColorCrimsonClicked() { inspector?.setOutlineColorPreset(index: 5) }
     @objc private func outlineColorWhiteClicked() { inspector?.setOutlineColorPreset(index: 6) }
     @objc private func outlineColorCyanClicked() { inspector?.setOutlineColorPreset(index: 7) }
+
+    @objc private func outlineStyleSolidClicked() { inspector?.setOutlineGradientMode(.solid) }
+    @objc private func outlineStyleVerticalClicked() { inspector?.setOutlineGradientMode(.vertical) }
+    @objc private func outlineStyleRadialClicked() { inspector?.setOutlineGradientMode(.radial) }
+    @objc private func outlineStyleRainbowClicked() { inspector?.setOutlineGradientMode(.rainbow) }
+    @objc private func outlineStyleFacetsClicked() { inspector?.setOutlineGradientMode(.randomFacets) }
+    @objc private func randomizeOutlineColorsMenuClicked() { inspector?.onRandomizeColorsClicked() }
+    @objc private func vibgyorPaletteMenuClicked() {
+        inspector?.applyVibgyorPalette()
+    }
 }
 
 @main

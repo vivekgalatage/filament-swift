@@ -693,6 +693,12 @@ namespace FilamentBridge {
         }
     }
 
+    void setMaterialParameterInt(filament::MaterialInstance* inst, const char* name, int32_t v) {
+        if (inst && name) {
+            inst->setParameter(name, v);
+        }
+    }
+
     void setMaterialParameterFloat(filament::MaterialInstance* inst, const char* name, float v) {
         if (inst && name) {
             inst->setParameter(name, v);

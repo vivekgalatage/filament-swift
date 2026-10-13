@@ -10,6 +10,42 @@ material {
         {
             type : float,
             name : outlineThickness
+        },
+        {
+            type : int,
+            name : gradientMode
+        },
+        {
+            type : int,
+            name : stopCount
+        },
+        { type : float4, name : color0 },
+        { type : float4, name : color1 },
+        { type : float4, name : color2 },
+        { type : float4, name : color3 },
+        { type : float4, name : color4 },
+        { type : float4, name : color5 },
+        { type : float4, name : color6 },
+        { type : float4, name : color7 },
+        { type : float,  name : pos0 },
+        { type : float,  name : pos1 },
+        { type : float,  name : pos2 },
+        { type : float,  name : pos3 },
+        { type : float,  name : pos4 },
+        { type : float,  name : pos5 },
+        { type : float,  name : pos6 },
+        { type : float,  name : pos7 },
+        {
+            type : float,
+            name : gradientPhase
+        },
+        {
+            type : float,
+            name : gradientScale
+        },
+        {
+            type : float,
+            name : noiseScale
         }
     ],
     requires : [
@@ -30,8 +66,104 @@ vertex {
 }
 
 fragment {
+    vec4 evaluateGradient(float t) {
+        t = clamp(t, 0.0, 1.0);
+        int count = materialParams.stopCount;
+        if (count <= 1) {
+            return materialParams.color0;
+        }
+
+        if (t <= materialParams.pos0) return materialParams.color0;
+        if (count >= 2 && t < materialParams.pos1) {
+            float f = (t - materialParams.pos0) / max(0.0001, materialParams.pos1 - materialParams.pos0);
+            return mix(materialParams.color0, materialParams.color1, clamp(f, 0.0, 1.0));
+        }
+        if (count >= 3 && t < materialParams.pos2) {
+            float f = (t - materialParams.pos1) / max(0.0001, materialParams.pos2 - materialParams.pos1);
+            return mix(materialParams.color1, materialParams.color2, clamp(f, 0.0, 1.0));
+        }
+        if (count >= 4 && t < materialParams.pos3) {
+            float f = (t - materialParams.pos2) / max(0.0001, materialParams.pos3 - materialParams.pos2);
+            return mix(materialParams.color2, materialParams.color3, clamp(f, 0.0, 1.0));
+        }
+        if (count >= 5 && t < materialParams.pos4) {
+            float f = (t - materialParams.pos3) / max(0.0001, materialParams.pos4 - materialParams.pos3);
+            return mix(materialParams.color3, materialParams.color4, clamp(f, 0.0, 1.0));
+        }
+        if (count >= 6 && t < materialParams.pos5) {
+            float f = (t - materialParams.pos4) / max(0.0001, materialParams.pos5 - materialParams.pos4);
+            return mix(materialParams.color4, materialParams.color5, clamp(f, 0.0, 1.0));
+        }
+        if (count >= 7 && t < materialParams.pos6) {
+            float f = (t - materialParams.pos5) / max(0.0001, materialParams.pos6 - materialParams.pos5);
+            return mix(materialParams.color5, materialParams.color6, clamp(f, 0.0, 1.0));
+        }
+        if (count >= 8 && t < materialParams.pos7) {
+            float f = (t - materialParams.pos6) / max(0.0001, materialParams.pos7 - materialParams.pos6);
+            return mix(materialParams.color6, materialParams.color7, clamp(f, 0.0, 1.0));
+        }
+
+        if (count == 2) return materialParams.color1;
+        if (count == 3) return materialParams.color2;
+        if (count == 4) return materialParams.color3;
+        if (count == 5) return materialParams.color4;
+        if (count == 6) return materialParams.color5;
+        if (count == 7) return materialParams.color6;
+        return materialParams.color7;
+    }
+
+    vec4 rainbowColor(float t) {
+        // High quality VIBGYOR / spectral palette using cosine formula:
+        // c = a + b * cos(2*pi*(c*t + d))
+        vec3 a = vec3(0.5, 0.5, 0.5);
+        vec3 b = vec3(0.5, 0.5, 0.5);
+        vec3 c = vec3(1.0, 1.0, 1.0);
+        vec3 d = vec3(0.0, 0.33, 0.67);
+        vec3 rgb = a + b * cos(6.2831853 * (c * t + d));
+        return vec4(rgb, 1.0);
+    }
+
+    float hash13(vec3 p3) {
+        p3  = fract(p3 * 0.1031);
+        p3 += dot(p3, p3.zyx + 31.32);
+        return fract((p3.x + p3.y) * p3.z);
+    }
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = materialParams.outlineColor;
+
+        int mode = materialParams.gradientMode;
+        if (mode == 0) {
+            // Solid outline color
+            material.baseColor = materialParams.outlineColor;
+            return;
+        }
+
+        vec3 pos = getWorldPosition();
+        float t = 0.0;
+
+        if (mode == 1) {
+            // Vertical Height Gradient: maps world Y to [0, 1]
+            t = fract((pos.y * materialParams.gradientScale) + materialParams.gradientPhase);
+            material.baseColor = evaluateGradient(t);
+        } else if (mode == 2) {
+            // Radial Angle Gradient: around vertical axis
+            float angle = atan(pos.z, pos.x);
+            float normAngle = (angle + 3.14159265) / 6.2831853;
+            t = fract((normAngle * materialParams.gradientScale) + materialParams.gradientPhase);
+            material.baseColor = evaluateGradient(t);
+        } else if (mode == 3) {
+            // Continuous VIBGYOR Spectral Rainbow
+            t = fract((pos.y * materialParams.gradientScale) + materialParams.gradientPhase);
+            material.baseColor = rainbowColor(t);
+        } else if (mode == 4) {
+            // Randomized / Noise Multi-Color Pattern across 3D facets
+            vec3 cellPos = floor(pos * materialParams.noiseScale);
+            float h = hash13(cellPos);
+            t = fract(h + materialParams.gradientPhase);
+            material.baseColor = evaluateGradient(t);
+        } else {
+            material.baseColor = materialParams.outlineColor;
+        }
     }
 }
