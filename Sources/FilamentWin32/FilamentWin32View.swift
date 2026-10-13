@@ -40,11 +40,9 @@ public final class FilamentWin32View {
 
     deinit {
         let engine = engine
-        let swapChain = swapChainBox.take()
-        hwnd = nil
-        isRendering = false
+        let swapChainBox = swapChainBox
         FilamentMainActor.perform {
-            if let eng = engine.engine, let sc = swapChain {
+            if let eng = engine.engine, let sc = swapChainBox.take() {
                 FilamentBridge.destroySwapChain(eng, sc)
             }
         }

@@ -25,9 +25,11 @@ final class FilamentEngineStorage: @unchecked Sendable {
     var indirectLight: OpaquePointer?
     var colorGrading: OpaquePointer?
     var lightIds: Set<UInt32> = []
+    var isShutDown: Bool = false
 
     /// Detaches every handle and returns them for destruction.
     func detach() -> FilamentEngineResources {
+        isShutDown = true
         let snapshot = FilamentEngineResources(
             engine: engine,
             renderer: renderer,
@@ -104,7 +106,7 @@ public final class FilamentEngine: @unchecked Sendable {
     public var view: OpaquePointer? { storage.view }
 
     /// `true` once `shutDown()` (or `deinit`) has released the Filament objects.
-    public private(set) var isShutDown: Bool = false
+    public var isShutDown: Bool { storage.isShutDown }
 
     public convenience init() {
         self.init(backend: .default)
@@ -157,7 +159,6 @@ public final class FilamentEngine: @unchecked Sendable {
 
     deinit {
         let snapshot = storage.detach()
-        isShutDown = true
         FilamentMainActor.perform { snapshot.destroyAll() }
     }
 
@@ -167,8 +168,7 @@ public final class FilamentEngine: @unchecked Sendable {
     /// engine backing it and this is only needed to release GPU resources eagerly.
     /// Call `FilamentModel.unload()` first if models are still attached.
     public func shutDown() {
-        guard !isShutDown else { return }
-        isShutDown = true
+        guard !storage.isShutDown else { return }
         let snapshot = storage.detach()
         FilamentMainActor.perform { snapshot.destroyAll() }
     }

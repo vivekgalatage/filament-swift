@@ -33,11 +33,9 @@ public final class FilamentGTKView {
 
     deinit {
         let engine = engine
-        let swapChain = swapChainBox.take()
-        nativeWindow = nil
-        isRendering = false
+        let swapChainBox = swapChainBox
         FilamentMainActor.perform {
-            if let eng = engine.engine, let sc = swapChain {
+            if let eng = engine.engine, let sc = swapChainBox.take() {
                 FilamentBridge.destroySwapChain(eng, sc)
             }
         }

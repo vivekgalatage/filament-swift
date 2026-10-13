@@ -46,10 +46,9 @@ public final class FilamentView: NSView {
         // Keep the engine alive until the swap chain is actually destroyed, even if the
         // teardown has to be hopped onto the main actor.
         let engine = engine
-        let swapChain = swapChainBox.take()
-        isRendering = false
+        let swapChainBox = swapChainBox
         FilamentMainActor.perform {
-            if let eng = engine.engine, let sc = swapChain {
+            if let eng = engine.engine, let sc = swapChainBox.take() {
                 FilamentBridge.destroySwapChain(eng, sc)
             }
         }

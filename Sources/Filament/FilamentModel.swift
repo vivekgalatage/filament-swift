@@ -24,6 +24,12 @@ public final class FilamentModel {
     /// calls that consume it are main-actor bound.
     private final class Storage: @unchecked Sendable {
         var glbContext: UnsafeMutablePointer<FilamentBridge.GlbContext>?
+
+        func take() -> UnsafeMutablePointer<FilamentBridge.GlbContext>? {
+            let previous = glbContext
+            glbContext = nil
+            return previous
+        }
     }
 
     private let storage = Storage()
@@ -64,14 +70,13 @@ public final class FilamentModel {
     }
 
     deinit {
-        // Captured by value so the raw pointers stay valid even when the engine that owns
-        // them is torn down on another thread first. `engineRef` is retained by this
+        // Captured via the `@unchecked Sendable` storage box so raw pointers stay valid
+        // without crossing a `@Sendable` closure boundary. `engineRef` is retained by this
         // closure, so the engine cannot be destroyed before the asset is released.
-        let ctx = storage.glbContext
-        storage.glbContext = nil
+        let storage = storage
         let engine = engineRef
         FilamentMainActor.perform {
-            guard let ctx else { return }
+            guard let ctx = storage.take() else { return }
             FilamentBridge.destroyGlbContext(engine.engine, engine.scene, ctx)
         }
     }

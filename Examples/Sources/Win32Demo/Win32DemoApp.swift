@@ -69,18 +69,18 @@ final class Win32DemoApp {
                                 PostQuitMessage(0)
                                 return 0
                             }
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 Win32DemoApp.shared?.handleKeyDown(key: key)
                             }
                             return 0
                         case WM_MOUSEWHEEL:
                             let delta = wheelDelta(UInt64(wParam))
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 Win32DemoApp.shared?.scene?.handleMouseWheel(delta: delta)
                             }
                             return 0
                         case WM_SIZE:
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 Win32DemoApp.shared?.handleResize()
                             }
                             return 0
@@ -120,7 +120,7 @@ final class Win32DemoApp {
                             _ = win32SetCapture(UnsafeRawPointer(hwnd))
                             let x = mouseX(lParam)
                             let y = mouseY(lParam)
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 Win32DemoApp.shared?.scene?.handleMouseDown(x: x, y: y)
                             }
                             return 0
@@ -131,7 +131,7 @@ final class Win32DemoApp {
                             }
                             return 0
                         case WM_LBUTTONDBLCLK:
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 Win32DemoApp.shared?.scene?.resetCamera()
                             }
                             return 0
@@ -140,14 +140,14 @@ final class Win32DemoApp {
                             if (flags & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) != 0 {
                                 let x = mouseX(lParam)
                                 let y = mouseY(lParam)
-                                Task { @MainActor in
+                                MainActor.assumeIsolated {
                                     Win32DemoApp.shared?.scene?.handleMouseMove(x: x, y: y, flags: flags)
                                 }
                             }
                             return 0
                         case WM_MOUSEWHEEL:
                             let delta = wheelDelta(UInt64(wParam))
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 Win32DemoApp.shared?.scene?.handleMouseWheel(delta: delta)
                             }
                             return 0
@@ -326,26 +326,26 @@ final class Win32DemoApp {
 
             if notification == BN_CLICKED {
                 if id == ControlID.openModel {
-                    Task { @MainActor in
+                    MainActor.assumeIsolated {
                         Win32DemoApp.shared?.openModelFromDialog()
                     }
                     return true
                 }
                 if id == ControlID.resetView {
-                    Task { @MainActor in
+                    MainActor.assumeIsolated {
                         Win32DemoApp.shared?.scene?.resetCamera()
                     }
                     return true
                 }
                 if id == ControlID.resetPBR {
-                    Task { @MainActor in
+                    MainActor.assumeIsolated {
                         guard let app = Win32DemoApp.shared else { return }
                         app.controlPanel?.handleResetPBR(pbr: app.scene?.pbrController)
                     }
                     return true
                 }
                 let checked = win32SendMessageW(control, BM_GETCHECK, 0, 0) == BST_CHECKED
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     guard let app = Win32DemoApp.shared else { return }
                     app.controlPanel?.handleCheckbox(id: id, checked: checked, pbr: app.scene?.pbrController)
                 }
@@ -355,7 +355,7 @@ final class Win32DemoApp {
             if notification == CBN_SELCHANGE {
                 let selection = Int(win32SendMessageW(control, CB_GETCURSEL, 0, 0))
                 guard selection >= 0 else { return false }
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     guard let app = Win32DemoApp.shared else { return }
                     app.controlPanel?.handleCombo(id: id, selection: selection, pbr: app.scene?.pbrController)
                 }
@@ -368,7 +368,7 @@ final class Win32DemoApp {
             let id = Int(win32GetDlgCtrlID(control))
             guard id != 0 else { return false }
             let position = Int(win32SendMessageW(control, TBM_GETPOS, 0, 0))
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let app = Win32DemoApp.shared else { return }
                 app.controlPanel?.handleTrackbar(id: id, position: position, pbr: app.scene?.pbrController)
             }
