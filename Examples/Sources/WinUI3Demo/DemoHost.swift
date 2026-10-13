@@ -43,6 +43,11 @@ private let CW_USEDEFAULT: Int32 = Int32(bitPattern: 0x8000_0000)
 private let PM_REMOVE: UInt32 = 0x0001
 private let QS_ALLINPUT: UInt32 = 0x04FF
 private let MWMO_INPUTAVAILABLE: UInt32 = 0x0004
+private let WS_CLIPCHILDREN: UInt32 = 0x0200_0000
+private let WS_CLIPSIBLINGS: UInt32 = 0x0400_0000
+private let WS_VISIBLE: UInt32 = 0x1000_0000
+private let WS_CHILD: UInt32 = 0x4000_0000
+private let WS_OVERLAPPEDWINDOW: UInt32 = 0x00CF_0000
 private let kTrue: Int32 = 1
 
 @_silgen_name("MoveWindow")
@@ -269,9 +274,7 @@ final class DemoHost {
                 try bridge.moveAndResize(UWP.RectInt32(x: 0, y: 0, width: w, height: h))
                 try bridge.show()
             }
-            if let first = ModelDiscovery.discoverModels().first, currentModelName != nil {
-                panel.syncModelAndAnimations()
-            } else if currentModelName != nil {
+            if currentModelName != nil {
                 panel.syncModelAndAnimations()
             }
         } catch {
