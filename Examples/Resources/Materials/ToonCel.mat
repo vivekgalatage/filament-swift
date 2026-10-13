@@ -30,6 +30,42 @@ material {
         {
             type : float,
             name : feather
+        },
+        {
+            type : int,
+            name : halftoneMode
+        },
+        {
+            type : int,
+            name : halftoneTarget
+        },
+        {
+            type : float,
+            name : halftoneScale
+        },
+        {
+            type : float,
+            name : halftoneAngle
+        },
+        {
+            type : float,
+            name : halftoneDotSize
+        },
+        {
+            type : float,
+            name : halftoneHardness
+        },
+        {
+            type : float,
+            name : halftoneBlend
+        },
+        {
+            type : float4,
+            name : halftoneDotColor
+        },
+        {
+            type : float4,
+            name : halftonePaperColor
         }
     ],
     requires : [
@@ -40,40 +76,140 @@ material {
 }
 
 fragment {
+    // Evaluates a single rotated grid dot mask in [0.0, 1.0]
+    float evalHalftoneDot(vec2 p, float angleDeg, float scale, float darkness, float dotSize, float hardness) {
+        float rad = radians(angleDeg);
+        mat2 rot = mat2(cos(rad), -sin(rad), sin(rad), cos(rad));
+        vec2 grid = (rot * p) / max(1.0, scale);
+        vec2 cellOffset = fract(grid) - 0.5;
+        float distToCenter = length(cellOffset);
+        float fw = fwidth(distToCenter);
+        float targetRadius = clamp(darkness, 0.0, 1.0) * 0.7071 * dotSize;
+        float eps = max(0.005, (1.0 - hardness) * 0.15 + fw);
+        return 1.0 - smoothstep(targetRadius - eps, targetRadius + eps, distToCenter);
+    }
+
+    // Evaluates a single rotated grid line mask for hatching in [0.0, 1.0]
+    float evalHalftoneLine(vec2 p, float angleDeg, float scale, float darkness, float lineSize, float hardness) {
+        float rad = radians(angleDeg);
+        mat2 rot = mat2(cos(rad), -sin(rad), sin(rad), cos(rad));
+        vec2 grid = (rot * p) / max(1.0, scale);
+        float distToLine = abs(fract(grid.y) - 0.5);
+        float fw = fwidth(distToLine);
+        float targetWidth = clamp(darkness, 0.0, 1.0) * 0.5 * lineSize;
+        float eps = max(0.005, (1.0 - hardness) * 0.15 + fw);
+        return 1.0 - smoothstep(targetWidth - eps, targetWidth + eps, distToLine);
+    }
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
 
-        // Normalize interpolated geometric normal and light direction
+        // Normalize geometric normal and light direction
         vec3 N = normalize(getWorldGeometricNormalVector());
         vec3 L = normalize(materialParams.lightDirection);
 
         // Lambertian cosine law: N dot L in range [-1.0, 1.0]
         float nDotL = dot(N, L);
 
-        // Anti-aliased thresholding using smoothstep to prevent pixel crawling
+        // Anti-aliased thresholding using smoothstep
         float eps = max(materialParams.feather, 0.001);
 
-        // Shadow to midtone boundary
+        // Shadow to midtone factor
         float shadowFactor = smoothstep(materialParams.shadowThreshold - eps,
                                         materialParams.shadowThreshold + eps,
                                         nDotL);
 
-        // Midtone to highlight boundary (3-tone cartoon shading)
+        // Midtone to highlight factor
         float highlightFactor = smoothstep(materialParams.highlightThreshold - eps,
                                            materialParams.highlightThreshold + eps,
                                            nDotL);
 
         // Cartoon cel color tiers:
-        // 1. Shadow tone: baseColor * shadowColorMultiplier
-        // 2. Midtone tone: pure local painted cel color
-        // 3. Highlight tone: baseColor illuminated by lightColor
         vec3 shadowColor = materialParams.baseColor.rgb * materialParams.shadowColorMultiplier;
         vec3 midtoneColor = materialParams.baseColor.rgb;
         vec3 highlightColor = materialParams.baseColor.rgb * materialParams.lightColor;
 
-        // Quantize into distinct cartoon bands
         vec3 diffuseTone = mix(shadowColor, midtoneColor, shadowFactor);
-        vec3 finalRgb = mix(diffuseTone, highlightColor, highlightFactor);
+        vec3 celRgb = mix(diffuseTone, highlightColor, highlightFactor);
+
+        int mode = materialParams.halftoneMode;
+        if (mode <= 0) {
+            material.baseColor = vec4(celRgb, materialParams.baseColor.a);
+            return;
+        }
+
+        // Coordinate space selection:
+        // mode 1: Screen-space coordinates (classic fixed Ben-Day print)
+        // mode 2: Surface UV coordinates (model-anchored screentone)
+        // mode 3: CMYK Color Separation (Screen space)
+        // mode 4: Hatching / Engraving Lines (Screen space)
+        vec2 coord;
+        if (mode == 2) {
+            coord = getUV0() * (materialParams.halftoneScale * 10.0);
+        } else {
+            coord = gl_FragCoord.xy;
+        }
+
+        // Determine darkness/shading level according to target zone:
+        // target 0: Shadows only (Manga screentone in shadow/midtone boundary)
+        // target 1: Full surface intensity (Pop-Art print over entire lighting range)
+        // target 2: Highlights only
+        float darkness;
+        int target = materialParams.halftoneTarget;
+        if (target == 0) {
+            darkness = 1.0 - shadowFactor;
+        } else if (target == 2) {
+            darkness = highlightFactor;
+        } else {
+            float normalizedLight = clamp((nDotL + 1.0) * 0.5, 0.0, 1.0);
+            darkness = 1.0 - normalizedLight;
+        }
+
+        vec3 halftoneRgb;
+        float scale = max(2.0, materialParams.halftoneScale);
+        float baseAngle = materialParams.halftoneAngle;
+        float dotSize = max(0.05, materialParams.halftoneDotSize);
+        float hardness = clamp(materialParams.halftoneHardness, 0.0, 1.0);
+        vec3 dotColor = materialParams.halftoneDotColor.rgb;
+        vec3 paperColor = materialParams.halftonePaperColor.rgb;
+
+        if (mode == 3) {
+            // CMYK 4-color process separation
+            vec3 cmykSource = (target == 1) ? materialParams.baseColor.rgb * clamp((nDotL + 1.0) * 0.5, 0.15, 1.0) : celRgb;
+            float k = 1.0 - max(max(cmykSource.r, cmykSource.g), cmykSource.b);
+            float c = (1.0 - cmykSource.r - k) / max(0.0001, 1.0 - k);
+            float m = (1.0 - cmykSource.g - k) / max(0.0001, 1.0 - k);
+            float y = (1.0 - cmykSource.b - k) / max(0.0001, 1.0 - k);
+
+            float cMask = evalHalftoneDot(coord, baseAngle + 15.0, scale, c, dotSize, hardness);
+            float mMask = evalHalftoneDot(coord, baseAngle + 75.0, scale, m, dotSize, hardness);
+            float yMask = evalHalftoneDot(coord, baseAngle + 0.0,  scale, y, dotSize, hardness);
+            float kMask = evalHalftoneDot(coord, baseAngle + 45.0, scale, k, dotSize, hardness);
+
+            vec3 cmykResult = paperColor;
+            cmykResult.r *= (1.0 - cMask);
+            cmykResult.g *= (1.0 - mMask);
+            cmykResult.b *= (1.0 - yMask);
+            cmykResult *= (1.0 - kMask);
+            halftoneRgb = cmykResult;
+        } else if (mode == 4) {
+            // Hatching / Engraving Lines
+            float lineMask = evalHalftoneLine(coord, baseAngle, scale, darkness, dotSize, hardness);
+            if (darkness > 0.65) {
+                float crossMask = evalHalftoneLine(coord, baseAngle + 60.0, scale, (darkness - 0.65) * 2.5, dotSize, hardness);
+                lineMask = max(lineMask, crossMask);
+            }
+            vec3 bgTone = (target == 1) ? paperColor : celRgb;
+            halftoneRgb = mix(bgTone, dotColor, lineMask);
+        } else {
+            // Standard Dots (Screen-space or UV surface)
+            float dotMask = evalHalftoneDot(coord, baseAngle, scale, darkness, dotSize, hardness);
+            vec3 bgTone = (target == 1) ? paperColor : celRgb;
+            halftoneRgb = mix(bgTone, dotColor, dotMask);
+        }
+
+        float blend = clamp(materialParams.halftoneBlend, 0.0, 1.0);
+        vec3 finalRgb = mix(celRgb, halftoneRgb, blend);
 
         material.baseColor = vec4(finalRgb, materialParams.baseColor.a);
     }

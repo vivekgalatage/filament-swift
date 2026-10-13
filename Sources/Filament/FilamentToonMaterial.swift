@@ -65,6 +65,178 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         didSet { updateThresholds() }
     }
 
+    // MARK: - Halftone & Screentone Parameters
+
+    public enum HalftoneMode: Int, CaseIterable, Sendable {
+        case disabled = 0
+        case screenDots = 1
+        case surfaceUVDots = 2
+        case cmykPrint = 3
+        case hatchingLines = 4
+
+        public var title: String {
+            switch self {
+            case .disabled: return "Disabled (Clean Cel)"
+            case .screenDots: return "Screen-Space Dots (Pop-Art / Spider-Verse)"
+            case .surfaceUVDots: return "Surface UV Dots (Manga Screentone)"
+            case .cmykPrint: return "CMYK 4-Color Print Separation"
+            case .hatchingLines: return "Hatching / Engraving Lines"
+            }
+        }
+    }
+
+    public enum HalftoneTarget: Int, CaseIterable, Sendable {
+        case shadowsOnly = 0
+        case fullSurface = 1
+        case highlightsOnly = 2
+
+        public var title: String {
+            switch self {
+            case .shadowsOnly: return "Shadows & Transitions (Manga)"
+            case .fullSurface: return "Full Surface (Pop-Art Print)"
+            case .highlightsOnly: return "Highlights Only"
+            }
+        }
+    }
+
+    /// Halftone rendering pattern mode (dots, UV screentone, CMYK, hatching).
+    public var halftoneMode: HalftoneMode = .disabled {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Halftone target shading zone (shadows only, full surface, highlights only).
+    public var halftoneTarget: HalftoneTarget = .shadowsOnly {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Dot/line frequency scale. Higher values = finer dots; lower = bold graphic dots.
+    public var halftoneScale: Float = 24.0 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Dot grid screen rotation angle in degrees (e.g. 45° standard printing angle).
+    public var halftoneAngle: Float = 45.0 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Dot radius or line width multiplier (0.1 to 2.0).
+    public var halftoneDotSize: Float = 1.0 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Dot edge hardness (0.0 = soft ink bleed, 1.0 = razor-sharp vector circles).
+    public var halftoneHardness: Float = 0.85 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Blend factor between pure cel shading (0.0) and full halftone effect (1.0).
+    public var halftoneBlend: Float = 1.0 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Color of the printed ink dots (RGBA).
+    public var halftoneDotColor: (r: Float, g: Float, b: Float, a: Float) = (0.08, 0.06, 0.05, 1.0) {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Color of the paper / background beneath the halftone dots (RGBA).
+    public var halftonePaperColor: (r: Float, g: Float, b: Float, a: Float) = (0.98, 0.97, 0.94, 1.0) {
+        didSet { updateHalftoneParameters() }
+    }
+
+    public struct HalftonePreset: Sendable {
+        public let name: String
+        public let mode: HalftoneMode
+        public let target: HalftoneTarget
+        public let scale: Float
+        public let angle: Float
+        public let dotSize: Float
+        public let hardness: Float
+        public let dotColor: (r: Float, g: Float, b: Float, a: Float)
+        public let paperColor: (r: Float, g: Float, b: Float, a: Float)
+
+        public init(
+            name: String,
+            mode: HalftoneMode,
+            target: HalftoneTarget,
+            scale: Float,
+            angle: Float,
+            dotSize: Float,
+            hardness: Float,
+            dotColor: (r: Float, g: Float, b: Float, a: Float),
+            paperColor: (r: Float, g: Float, b: Float, a: Float)
+        ) {
+            self.name = name
+            self.mode = mode
+            self.target = target
+            self.scale = scale
+            self.angle = angle
+            self.dotSize = dotSize
+            self.hardness = hardness
+            self.dotColor = dotColor
+            self.paperColor = paperColor
+        }
+    }
+
+    public static let spiderVersePreset = HalftonePreset(
+        name: "Spider-Verse Pop-Art",
+        mode: .screenDots,
+        target: .fullSurface,
+        scale: 18.0,
+        angle: 45.0,
+        dotSize: 1.05,
+        hardness: 0.92,
+        dotColor: (0.05, 0.05, 0.06, 1.0),
+        paperColor: (0.98, 0.97, 0.95, 1.0)
+    )
+
+    public static let mangaScreentonePreset = HalftonePreset(
+        name: "Manga Screentone",
+        mode: .surfaceUVDots,
+        target: .shadowsOnly,
+        scale: 32.0,
+        angle: 45.0,
+        dotSize: 1.0,
+        hardness: 0.88,
+        dotColor: (0.08, 0.07, 0.06, 1.0),
+        paperColor: (0.98, 0.98, 0.98, 1.0)
+    )
+
+    public static let cmykNewspaperPreset = HalftonePreset(
+        name: "Vintage CMYK Newspaper",
+        mode: .cmykPrint,
+        target: .fullSurface,
+        scale: 22.0,
+        angle: 0.0,
+        dotSize: 1.1,
+        hardness: 0.80,
+        dotColor: (0.0, 0.0, 0.0, 1.0),
+        paperColor: (0.96, 0.94, 0.88, 1.0)
+    )
+
+    public static let comicHatchingPreset = HalftonePreset(
+        name: "Woodcut / Pen Hatching",
+        mode: .hatchingLines,
+        target: .shadowsOnly,
+        scale: 18.0,
+        angle: 35.0,
+        dotSize: 1.0,
+        hardness: 0.90,
+        dotColor: (0.10, 0.08, 0.07, 1.0),
+        paperColor: (0.98, 0.97, 0.94, 1.0)
+    )
+
+    public func applyPreset(_ preset: HalftonePreset) {
+        self.halftoneMode = preset.mode
+        self.halftoneTarget = preset.target
+        self.halftoneScale = preset.scale
+        self.halftoneAngle = preset.angle
+        self.halftoneDotSize = preset.dotSize
+        self.halftoneHardness = preset.hardness
+        self.halftoneDotColor = preset.dotColor
+        self.halftonePaperColor = preset.paperColor
+    }
+
     // MARK: - Initialization & Teardown
 
     /// Compiles and instantiates the Toon material from precompiled `.filamat` binary data.
@@ -110,6 +282,7 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         updateShadowMultiplier()
         updateLightDirection()
         updateThresholds()
+        updateHalftoneParameters()
     }
 
     private func updateBaseColor() {
@@ -148,6 +321,23 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         "shadowThreshold".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, shadowThreshold) }
         "highlightThreshold".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, highlightThreshold) }
         "feather".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, edgeFeather) }
+    }
+
+    private func updateHalftoneParameters() {
+        guard let inst = storage.materialInstance else { return }
+        "halftoneMode".withCString { FilamentBridge.setMaterialParameterInt(inst, $0, Int32(halftoneMode.rawValue)) }
+        "halftoneTarget".withCString { FilamentBridge.setMaterialParameterInt(inst, $0, Int32(halftoneTarget.rawValue)) }
+        "halftoneScale".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, halftoneScale) }
+        "halftoneAngle".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, halftoneAngle) }
+        "halftoneDotSize".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, halftoneDotSize) }
+        "halftoneHardness".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, halftoneHardness) }
+        "halftoneBlend".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, halftoneBlend) }
+        "halftoneDotColor".withCString {
+            FilamentBridge.setMaterialParameterFloat4(inst, $0, halftoneDotColor.r, halftoneDotColor.g, halftoneDotColor.b, halftoneDotColor.a)
+        }
+        "halftonePaperColor".withCString {
+            FilamentBridge.setMaterialParameterFloat4(inst, $0, halftonePaperColor.r, halftonePaperColor.g, halftonePaperColor.b, halftonePaperColor.a)
+        }
     }
 
     // MARK: - Application to Renderables & Assets

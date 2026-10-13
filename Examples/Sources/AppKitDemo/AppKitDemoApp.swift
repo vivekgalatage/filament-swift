@@ -103,15 +103,36 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             keyEquivalent: "3"
         ))
         shadingMenu.addItem(NSMenuItem(
+            title: "Comic Halftone (Pop-Art / Manga)",
+            action: #selector(comicHalftoneShadingMenuClicked),
+            keyEquivalent: "4"
+        ))
+        shadingMenu.addItem(NSMenuItem(
+            title: "Halftone + Inked Outline",
+            action: #selector(halftoneWithOutlineShadingMenuClicked),
+            keyEquivalent: "5"
+        ))
+        shadingMenu.addItem(NSMenuItem(
             title: "PBR + Inked Outline",
             action: #selector(pbrWithOutlineShadingMenuClicked),
-            keyEquivalent: "4"
+            keyEquivalent: "6"
         ))
         shadingMenu.addItem(NSMenuItem(
             title: "Outline Only (Transparent Body)",
             action: #selector(outlineOnlyShadingMenuClicked),
-            keyEquivalent: "5"
+            keyEquivalent: "7"
         ))
+
+        shadingMenu.addItem(NSMenuItem.separator())
+        let halftoneMenu = NSMenu(title: "Halftone Preset")
+        halftoneMenu.addItem(NSMenuItem(title: "🦸 Spider-Verse Pop-Art", action: #selector(halftoneSpiderVerseClicked), keyEquivalent: ""))
+        halftoneMenu.addItem(NSMenuItem(title: "🎌 Manga Screentone", action: #selector(halftoneMangaClicked), keyEquivalent: ""))
+        halftoneMenu.addItem(NSMenuItem(title: "📰 Vintage CMYK Newspaper", action: #selector(halftoneCMYKClicked), keyEquivalent: ""))
+        halftoneMenu.addItem(NSMenuItem(title: "✒️ Woodcut / Pen Hatching", action: #selector(halftoneHatchingClicked), keyEquivalent: ""))
+        halftoneMenu.addItem(NSMenuItem(title: "🚫 Disable Halftone (Clean Cel)", action: #selector(halftoneDisabledClicked), keyEquivalent: ""))
+        let halftoneItem = NSMenuItem(title: "Halftone Preset", action: nil, keyEquivalent: "")
+        halftoneItem.submenu = halftoneMenu
+        shadingMenu.addItem(halftoneItem)
 
         shadingMenu.addItem(NSMenuItem.separator())
         let outlineColorMenu = NSMenu(title: "Outline Color")
@@ -256,6 +277,37 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
 
     @objc private func toonWithOutlineShadingMenuClicked() {
         scene?.setShadingMode(.toonWithOutline)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func comicHalftoneShadingMenuClicked() {
+        scene?.setShadingMode(.comicHalftone)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func halftoneWithOutlineShadingMenuClicked() {
+        scene?.setShadingMode(.halftoneWithOutline)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func halftoneSpiderVerseClicked() {
+        inspector?.applyHalftonePreset(FilamentToonMaterial.spiderVersePreset)
+    }
+
+    @objc private func halftoneMangaClicked() {
+        inspector?.applyHalftonePreset(FilamentToonMaterial.mangaScreentonePreset)
+    }
+
+    @objc private func halftoneCMYKClicked() {
+        inspector?.applyHalftonePreset(FilamentToonMaterial.cmykNewspaperPreset)
+    }
+
+    @objc private func halftoneHatchingClicked() {
+        inspector?.applyHalftonePreset(FilamentToonMaterial.comicHatchingPreset)
+    }
+
+    @objc private func halftoneDisabledClicked() {
+        scene?.setHalftoneMode(.disabled)
         inspector?.syncShadingMode()
     }
 

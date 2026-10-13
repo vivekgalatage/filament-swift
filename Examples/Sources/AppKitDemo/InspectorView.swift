@@ -35,6 +35,39 @@ final class InspectorView: NSObject {
     private var overlayLabel: NSTextField?
     private var overlayPassthroughCheckbox: NSButton?
 
+    private var halftoneModePopup: NSPopUpButton?
+    private var halftoneTargetPopup: NSPopUpButton?
+    private var halftonePresetPopup: NSPopUpButton?
+    private var halftoneDotColorPopup: NSPopUpButton?
+    private var halftoneDotColorWell: NSColorWell?
+    private var halftonePaperColorPopup: NSPopUpButton?
+    private var halftonePaperColorWell: NSColorWell?
+
+    private struct HalftoneColorPreset {
+        let name: String
+        let color: (r: Float, g: Float, b: Float, a: Float)
+        var nsColor: NSColor {
+            NSColor(srgbRed: CGFloat(color.r), green: CGFloat(color.g), blue: CGFloat(color.b), alpha: CGFloat(color.a))
+        }
+    }
+
+    private let halftoneInkPresets: [HalftoneColorPreset] = [
+        HalftoneColorPreset(name: "Comic Ink Black", color: (0.08, 0.06, 0.05, 1.0)),
+        HalftoneColorPreset(name: "Pure Black", color: (0.00, 0.00, 0.00, 1.0)),
+        HalftoneColorPreset(name: "Deep Navy Ink", color: (0.05, 0.12, 0.32, 1.0)),
+        HalftoneColorPreset(name: "Manga Sepia", color: (0.25, 0.15, 0.10, 1.0)),
+        HalftoneColorPreset(name: "Crimson Ink", color: (0.65, 0.08, 0.12, 1.0)),
+        HalftoneColorPreset(name: "Neon Cyan", color: (0.00, 0.80, 0.95, 1.0)),
+    ]
+
+    private let halftonePaperPresets: [HalftoneColorPreset] = [
+        HalftoneColorPreset(name: "Newsprint White", color: (0.98, 0.97, 0.94, 1.0)),
+        HalftoneColorPreset(name: "Pure White", color: (1.00, 1.00, 1.00, 1.0)),
+        HalftoneColorPreset(name: "Vintage Parchment", color: (0.94, 0.88, 0.78, 1.0)),
+        HalftoneColorPreset(name: "Blueprint Tint", color: (0.85, 0.92, 0.98, 1.0)),
+        HalftoneColorPreset(name: "Dark Comic Ink", color: (0.15, 0.16, 0.20, 1.0)),
+    ]
+
     private var solidColorRow: NSView!
     private var gradientControlsContainer: NSStackView!
     private var gradientStopsList: NSStackView!
@@ -166,6 +199,7 @@ final class InspectorView: NSObject {
         addHeader(to: content)
         addModelSection(to: content)
         addToonShadingSection(to: content)
+        addHalftoneSection(to: content)
         addMorphTargetsSection(to: content)
         addLightingSection(to: content)
         addToneMappingSection(to: content)
@@ -517,6 +551,196 @@ final class InspectorView: NSObject {
         }
     }
 
+    private func addHalftoneSection(to stack: NSStackView) {
+        stack.addArrangedSubview(makeSectionHeader("Halftone & Screentone"))
+
+        // Preset row
+        let presetPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        presetPopup.addItems(withTitles: [
+            "Presets…",
+            "🦸 Spider-Verse Pop-Art",
+            "🎌 Manga Screentone",
+            "📰 Vintage CMYK Newspaper",
+            "✒️ Woodcut / Pen Hatching",
+            "🚫 Disabled (Clean Cel)"
+        ])
+        presetPopup.selectItem(at: 0)
+        presetPopup.controlSize = .small
+        presetPopup.target = self
+        presetPopup.action = #selector(onHalftonePresetChanged(_:))
+        presetPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let presetRow = NSStackView(views: [
+            NSTextField(labelWithString: "Preset"),
+            presetPopup
+        ])
+        presetRow.orientation = .horizontal
+        presetRow.distribution = .fill
+        stack.addArrangedSubview(presetRow)
+        self.halftonePresetPopup = presetPopup
+
+        // Pattern / Mode
+        let modePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for mode in FilamentToonMaterial.HalftoneMode.allCases {
+            modePopup.addItem(withTitle: mode.title)
+        }
+        modePopup.selectItem(at: scene.toonMaterial?.halftoneMode.rawValue ?? 0)
+        modePopup.controlSize = .small
+        modePopup.target = self
+        modePopup.action = #selector(onHalftoneModeChanged(_:))
+        modePopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let modeRow = NSStackView(views: [
+            NSTextField(labelWithString: "Pattern"),
+            modePopup
+        ])
+        modeRow.orientation = .horizontal
+        modeRow.distribution = .fill
+        stack.addArrangedSubview(modeRow)
+        self.halftoneModePopup = modePopup
+
+        // Target Area
+        let targetPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for target in FilamentToonMaterial.HalftoneTarget.allCases {
+            targetPopup.addItem(withTitle: target.title)
+        }
+        targetPopup.selectItem(at: scene.toonMaterial?.halftoneTarget.rawValue ?? 0)
+        targetPopup.controlSize = .small
+        targetPopup.target = self
+        targetPopup.action = #selector(onHalftoneTargetChanged(_:))
+        targetPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let targetRow = NSStackView(views: [
+            NSTextField(labelWithString: "Target area"),
+            targetPopup
+        ])
+        targetRow.orientation = .horizontal
+        targetRow.distribution = .fill
+        stack.addArrangedSubview(targetRow)
+        self.halftoneTargetPopup = targetPopup
+
+        // Sliders
+        addSlider(to: stack, title: "Dot scale", range: 4.0...80.0,
+                  value: Double(scene.toonMaterial?.halftoneScale ?? 24.0),
+                  format: { String(format: "%.0f px", $0) }) { [weak self] val in
+            self?.scene.setHalftoneScale(Float(val))
+        }
+
+        addSlider(to: stack, title: "Screen angle", range: 0.0...90.0,
+                  value: Double(scene.toonMaterial?.halftoneAngle ?? 45.0),
+                  format: { String(format: "%.0f°", $0) }) { [weak self] val in
+            self?.scene.setHalftoneAngle(Float(val))
+        }
+
+        addSlider(to: stack, title: "Dot radius", range: 0.2...2.0,
+                  value: Double(scene.toonMaterial?.halftoneDotSize ?? 1.0),
+                  format: { String(format: "%.2f×", $0) }) { [weak self] val in
+            self?.scene.setHalftoneDotSize(Float(val))
+        }
+
+        addSlider(to: stack, title: "Dot hardness", range: 0.0...1.0,
+                  value: Double(scene.toonMaterial?.halftoneHardness ?? 0.85),
+                  format: { String(format: "%.2f", $0) }) { [weak self] val in
+            self?.scene.setHalftoneHardness(Float(val))
+        }
+
+        addSlider(to: stack, title: "Halftone blend", range: 0.0...1.0,
+                  value: Double(scene.toonMaterial?.halftoneBlend ?? 1.0),
+                  format: { String(format: "%.0f%%", $0 * 100.0) }) { [weak self] val in
+            self?.scene.setHalftoneBlend(Float(val))
+        }
+
+        // Ink Color Row
+        let inkRow = NSStackView()
+        inkRow.translatesAutoresizingMaskIntoConstraints = false
+        inkRow.orientation = .horizontal
+        inkRow.alignment = .centerY
+        inkRow.distribution = .fill
+        inkRow.spacing = 6.0
+
+        let inkLabel = NSTextField(labelWithString: "Ink color")
+        inkLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        inkLabel.setContentHuggingPriority(.required, for: .horizontal)
+        inkRow.addArrangedSubview(inkLabel)
+
+        let inkPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for preset in halftoneInkPresets {
+            inkPopup.addItem(withTitle: preset.name)
+        }
+        inkPopup.addItem(withTitle: "Custom…")
+        inkPopup.selectItem(at: 0)
+        inkPopup.controlSize = .small
+        inkPopup.target = self
+        inkPopup.action = #selector(onHalftoneInkPopupChanged(_:))
+        inkPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        inkRow.addArrangedSubview(inkPopup)
+        self.halftoneDotColorPopup = inkPopup
+
+        let inkWell = NSColorWell()
+        inkWell.translatesAutoresizingMaskIntoConstraints = false
+        inkWell.color = halftoneInkPresets[0].nsColor
+        inkWell.target = self
+        inkWell.action = #selector(onHalftoneInkWellChanged(_:))
+        inkWell.controlSize = .small
+        inkWell.toolTip = "Pick Custom Ink Color"
+        NSLayoutConstraint.activate([
+            inkWell.widthAnchor.constraint(equalToConstant: 28),
+            inkWell.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        inkRow.addArrangedSubview(inkWell)
+        self.halftoneDotColorWell = inkWell
+
+        stack.addArrangedSubview(inkRow)
+        NSLayoutConstraint.activate([
+            inkRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+
+        // Paper Tint Row
+        let paperRow = NSStackView()
+        paperRow.translatesAutoresizingMaskIntoConstraints = false
+        paperRow.orientation = .horizontal
+        paperRow.alignment = .centerY
+        paperRow.distribution = .fill
+        paperRow.spacing = 6.0
+
+        let paperLabel = NSTextField(labelWithString: "Paper tint")
+        paperLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        paperLabel.setContentHuggingPriority(.required, for: .horizontal)
+        paperRow.addArrangedSubview(paperLabel)
+
+        let paperPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for preset in halftonePaperPresets {
+            paperPopup.addItem(withTitle: preset.name)
+        }
+        paperPopup.addItem(withTitle: "Custom…")
+        paperPopup.selectItem(at: 0)
+        paperPopup.controlSize = .small
+        paperPopup.target = self
+        paperPopup.action = #selector(onHalftonePaperPopupChanged(_:))
+        paperPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        paperRow.addArrangedSubview(paperPopup)
+        self.halftonePaperColorPopup = paperPopup
+
+        let paperWell = NSColorWell()
+        paperWell.translatesAutoresizingMaskIntoConstraints = false
+        paperWell.color = halftonePaperPresets[0].nsColor
+        paperWell.target = self
+        paperWell.action = #selector(onHalftonePaperWellChanged(_:))
+        paperWell.controlSize = .small
+        paperWell.toolTip = "Pick Custom Paper Color"
+        NSLayoutConstraint.activate([
+            paperWell.widthAnchor.constraint(equalToConstant: 28),
+            paperWell.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        paperRow.addArrangedSubview(paperWell)
+        self.halftonePaperColorWell = paperWell
+
+        stack.addArrangedSubview(paperRow)
+        NSLayoutConstraint.activate([
+            paperRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+    }
+
     private func addMorphTargetsSection(to stack: NSStackView) {
         morphTargetsSection = NSStackView()
         morphTargetsSection.translatesAutoresizingMaskIntoConstraints = false
@@ -865,6 +1089,10 @@ final class InspectorView: NSObject {
     func syncShadingMode() {
         for binding in popupBindings where binding.key == "Style" {
             binding.popup.selectItem(at: scene.currentShadingMode.rawValue)
+        }
+        if let toon = scene.toonMaterial {
+            halftoneModePopup?.selectItem(at: toon.halftoneMode.rawValue)
+            halftoneTargetPopup?.selectItem(at: toon.halftoneTarget.rawValue)
         }
     }
 
@@ -1307,5 +1535,92 @@ final class InspectorView: NSObject {
         currentGradientStops.remove(at: index)
         scene.removeOutlineStop(at: index)
         rebuildGradientStopsUI()
+    }
+
+    // MARK: - Halftone Action Handlers
+
+    @objc private func onHalftoneModeChanged(_ sender: NSPopUpButton) {
+        guard let mode = FilamentToonMaterial.HalftoneMode(rawValue: sender.indexOfSelectedItem) else { return }
+        scene.setHalftoneMode(mode)
+    }
+
+    @objc private func onHalftoneTargetChanged(_ sender: NSPopUpButton) {
+        guard let target = FilamentToonMaterial.HalftoneTarget(rawValue: sender.indexOfSelectedItem) else { return }
+        scene.setHalftoneTarget(target)
+    }
+
+    @objc private func onHalftonePresetChanged(_ sender: NSPopUpButton) {
+        switch sender.indexOfSelectedItem {
+        case 1: // Spider-Verse
+            applyHalftonePreset(FilamentToonMaterial.spiderVersePreset)
+        case 2: // Manga Screentone
+            applyHalftonePreset(FilamentToonMaterial.mangaScreentonePreset)
+        case 3: // CMYK Newspaper
+            applyHalftonePreset(FilamentToonMaterial.cmykNewspaperPreset)
+        case 4: // Woodcut / Pen Hatching
+            applyHalftonePreset(FilamentToonMaterial.comicHatchingPreset)
+        case 5: // Disabled
+            scene.setHalftoneMode(.disabled)
+            halftoneModePopup?.selectItem(at: 0)
+        default: break
+        }
+    }
+
+    func applyHalftonePreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        scene.applyHalftonePreset(preset)
+        halftoneModePopup?.selectItem(at: preset.mode.rawValue)
+        halftoneTargetPopup?.selectItem(at: preset.target.rawValue)
+        updateSlider(titled: "Dot scale", to: Double(preset.scale))
+        updateSlider(titled: "Screen angle", to: Double(preset.angle))
+        updateSlider(titled: "Dot radius", to: Double(preset.dotSize))
+        updateSlider(titled: "Dot hardness", to: Double(preset.hardness))
+        updateSlider(titled: "Halftone blend", to: 1.0)
+        let dotNS = NSColor(srgbRed: CGFloat(preset.dotColor.r), green: CGFloat(preset.dotColor.g), blue: CGFloat(preset.dotColor.b), alpha: CGFloat(preset.dotColor.a))
+        halftoneDotColorWell?.color = dotNS
+        let paperNS = NSColor(srgbRed: CGFloat(preset.paperColor.r), green: CGFloat(preset.paperColor.g), blue: CGFloat(preset.paperColor.b), alpha: CGFloat(preset.paperColor.a))
+        halftonePaperColorWell?.color = paperNS
+    }
+
+    private func updateSlider(titled title: String, to value: Double) {
+        if let binding = sliderBindings.first(where: { $0.key == title }) {
+            binding.slider.doubleValue = min(max(value, binding.range.lowerBound), binding.range.upperBound)
+            binding.valueLabel.stringValue = binding.format(binding.slider.doubleValue)
+        }
+    }
+
+    @objc private func onHalftoneInkPopupChanged(_ sender: NSPopUpButton) {
+        let index = sender.indexOfSelectedItem
+        guard index >= 0 && index < halftoneInkPresets.count else { return }
+        let preset = halftoneInkPresets[index]
+        scene.setHalftoneDotColor(r: preset.color.r, g: preset.color.g, b: preset.color.b, a: preset.color.a)
+        halftoneDotColorWell?.color = preset.nsColor
+    }
+
+    @objc private func onHalftoneInkWellChanged(_ sender: NSColorWell) {
+        let c = sender.color.usingColorSpace(.sRGB) ?? sender.color
+        let r = Float(c.redComponent)
+        let g = Float(c.greenComponent)
+        let b = Float(c.blueComponent)
+        let a = Float(c.alphaComponent)
+        scene.setHalftoneDotColor(r: r, g: g, b: b, a: a)
+        halftoneDotColorPopup?.selectItem(withTitle: "Custom…")
+    }
+
+    @objc private func onHalftonePaperPopupChanged(_ sender: NSPopUpButton) {
+        let index = sender.indexOfSelectedItem
+        guard index >= 0 && index < halftonePaperPresets.count else { return }
+        let preset = halftonePaperPresets[index]
+        scene.setHalftonePaperColor(r: preset.color.r, g: preset.color.g, b: preset.color.b, a: preset.color.a)
+        halftonePaperColorWell?.color = preset.nsColor
+    }
+
+    @objc private func onHalftonePaperWellChanged(_ sender: NSColorWell) {
+        let c = sender.color.usingColorSpace(.sRGB) ?? sender.color
+        let r = Float(c.redComponent)
+        let g = Float(c.greenComponent)
+        let b = Float(c.blueComponent)
+        let a = Float(c.alphaComponent)
+        scene.setHalftonePaperColor(r: r, g: g, b: b, a: a)
+        halftonePaperColorPopup?.selectItem(withTitle: "Custom…")
     }
 }

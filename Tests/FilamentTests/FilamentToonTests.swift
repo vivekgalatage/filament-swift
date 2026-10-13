@@ -41,6 +41,43 @@ final class FilamentToonTests: XCTestCase {
         toonMaterial.syncWithDirectionalLight(direction: dir, color: col)
         XCTAssertEqual(toonMaterial.lightDirection.x, 0.3)
         XCTAssertEqual(toonMaterial.lightColor.b, 0.9)
+
+        // Halftone parameters verification
+        XCTAssertEqual(toonMaterial.halftoneMode, .disabled)
+        for mode in FilamentToonMaterial.HalftoneMode.allCases {
+            toonMaterial.halftoneMode = mode
+            XCTAssertEqual(toonMaterial.halftoneMode, mode)
+        }
+        for target in FilamentToonMaterial.HalftoneTarget.allCases {
+            toonMaterial.halftoneTarget = target
+            XCTAssertEqual(toonMaterial.halftoneTarget, target)
+        }
+
+        toonMaterial.halftoneScale = 28.0
+        toonMaterial.halftoneAngle = 30.0
+        toonMaterial.halftoneDotSize = 1.25
+        toonMaterial.halftoneHardness = 0.95
+        toonMaterial.halftoneBlend = 0.75
+        toonMaterial.halftoneDotColor = (0.02, 0.04, 0.08, 1.0)
+        toonMaterial.halftonePaperColor = (0.95, 0.92, 0.88, 1.0)
+
+        XCTAssertEqual(toonMaterial.halftoneScale, 28.0)
+        XCTAssertEqual(toonMaterial.halftoneAngle, 30.0)
+        XCTAssertEqual(toonMaterial.halftoneDotSize, 1.25)
+        XCTAssertEqual(toonMaterial.halftoneHardness, 0.95)
+        XCTAssertEqual(toonMaterial.halftoneBlend, 0.75)
+        XCTAssertEqual(toonMaterial.halftoneDotColor.b, 0.08)
+        XCTAssertEqual(toonMaterial.halftonePaperColor.r, 0.95)
+
+        // Test preset application
+        toonMaterial.applyPreset(FilamentToonMaterial.spiderVersePreset)
+        XCTAssertEqual(toonMaterial.halftoneMode, .screenDots)
+        XCTAssertEqual(toonMaterial.halftoneTarget, .fullSurface)
+        XCTAssertEqual(toonMaterial.halftoneScale, 18.0)
+
+        toonMaterial.applyPreset(FilamentToonMaterial.mangaScreentonePreset)
+        XCTAssertEqual(toonMaterial.halftoneMode, .surfaceUVDots)
+        XCTAssertEqual(toonMaterial.halftoneTarget, .shadowsOnly)
     }
 
     @MainActor

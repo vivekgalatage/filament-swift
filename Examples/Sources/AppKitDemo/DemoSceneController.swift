@@ -23,6 +23,8 @@ final class DemoSceneController {
         case toonWithOutline = 2
         case pbrWithOutline = 3
         case outlineOnly = 4
+        case comicHalftone = 5
+        case halftoneWithOutline = 6
 
         var title: String {
             switch self {
@@ -31,6 +33,8 @@ final class DemoSceneController {
             case .toonWithOutline: return "Toon + Inked Outline"
             case .pbrWithOutline: return "PBR + Inked Outline"
             case .outlineOnly: return "Outline Only (Transparent Body)"
+            case .comicHalftone: return "Comic Halftone (Pop-Art / Manga)"
+            case .halftoneWithOutline: return "Halftone + Inked Outline"
             }
         }
     }
@@ -228,6 +232,37 @@ final class DemoSceneController {
                 model.applyDepthMaskMaterial(mask)
             }
             model.setVisible(true)
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .comicHalftone:
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+
+        case .halftoneWithOutline:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
             if !outlineModel.isLoaded {
                 try? outlineModel.loadGlb(at: url)
                 outlineModel.setRotation(radiansY: 0.0)
@@ -501,6 +536,17 @@ final class DemoSceneController {
             overlay.setOutlineFlowSpeed(outline.flowAnimationSpeed)
             overlay.setOutlineNoiseScale(outline.noiseScale)
         }
+        if let toon = toonMaterial {
+            overlay.setHalftoneMode(toon.halftoneMode)
+            overlay.setHalftoneTarget(toon.halftoneTarget)
+            overlay.setHalftoneScale(toon.halftoneScale)
+            overlay.setHalftoneAngle(toon.halftoneAngle)
+            overlay.setHalftoneDotSize(toon.halftoneDotSize)
+            overlay.setHalftoneHardness(toon.halftoneHardness)
+            overlay.setHalftoneBlend(toon.halftoneBlend)
+            overlay.setHalftoneDotColor(r: toon.halftoneDotColor.r, g: toon.halftoneDotColor.g, b: toon.halftoneDotColor.b, a: toon.halftoneDotColor.a)
+            overlay.setHalftonePaperColor(r: toon.halftonePaperColor.r, g: toon.halftonePaperColor.g, b: toon.halftonePaperColor.b, a: toon.halftonePaperColor.a)
+        }
         overlay.isClickThrough = isOverlayEventPassthrough
         overlay.show()
         overlayWindow = overlay
@@ -518,6 +564,68 @@ final class DemoSceneController {
         let newValue = !isOverlayEventPassthrough
         setOverlayEventPassthrough(newValue)
         return newValue
+    }
+
+    // MARK: - Halftone & Screentone controls
+
+    func setHalftoneMode(_ mode: FilamentToonMaterial.HalftoneMode) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneMode = mode
+        overlayWindow?.setHalftoneMode(mode)
+    }
+
+    func setHalftoneTarget(_ target: FilamentToonMaterial.HalftoneTarget) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneTarget = target
+        overlayWindow?.setHalftoneTarget(target)
+    }
+
+    func setHalftoneScale(_ scale: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneScale = scale
+        overlayWindow?.setHalftoneScale(scale)
+    }
+
+    func setHalftoneAngle(_ angle: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneAngle = angle
+        overlayWindow?.setHalftoneAngle(angle)
+    }
+
+    func setHalftoneDotSize(_ size: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneDotSize = size
+        overlayWindow?.setHalftoneDotSize(size)
+    }
+
+    func setHalftoneHardness(_ hardness: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneHardness = hardness
+        overlayWindow?.setHalftoneHardness(hardness)
+    }
+
+    func setHalftoneBlend(_ blend: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneBlend = blend
+        overlayWindow?.setHalftoneBlend(blend)
+    }
+
+    func setHalftoneDotColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneDotColor = (r, g, b, a)
+        overlayWindow?.setHalftoneDotColor(r: r, g: g, b: b, a: a)
+    }
+
+    func setHalftonePaperColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureToonMaterials()
+        toonMaterial?.halftonePaperColor = (r, g, b, a)
+        overlayWindow?.setHalftonePaperColor(r: r, g: g, b: b, a: a)
+    }
+
+    func applyHalftonePreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        ensureToonMaterials()
+        toonMaterial?.applyPreset(preset)
+        overlayWindow?.applyHalftonePreset(preset)
     }
 
     func updateViewport() {

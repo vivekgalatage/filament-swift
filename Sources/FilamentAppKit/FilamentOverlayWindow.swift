@@ -298,6 +298,56 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
         outlineMaterial?.noiseScale = noise
     }
 
+    public func setHalftoneMode(_ mode: FilamentToonMaterial.HalftoneMode) {
+        ensureMaterials()
+        toonMaterial?.halftoneMode = mode
+    }
+
+    public func setHalftoneTarget(_ target: FilamentToonMaterial.HalftoneTarget) {
+        ensureMaterials()
+        toonMaterial?.halftoneTarget = target
+    }
+
+    public func setHalftoneScale(_ scale: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneScale = scale
+    }
+
+    public func setHalftoneAngle(_ angle: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneAngle = angle
+    }
+
+    public func setHalftoneDotSize(_ size: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneDotSize = size
+    }
+
+    public func setHalftoneHardness(_ hardness: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneHardness = hardness
+    }
+
+    public func setHalftoneBlend(_ blend: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneBlend = blend
+    }
+
+    public func setHalftoneDotColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureMaterials()
+        toonMaterial?.halftoneDotColor = (r, g, b, a)
+    }
+
+    public func setHalftonePaperColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureMaterials()
+        toonMaterial?.halftonePaperColor = (r, g, b, a)
+    }
+
+    public func applyHalftonePreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        ensureMaterials()
+        toonMaterial?.applyPreset(preset)
+    }
+
     private func applyShadingMode() {
         guard let url = currentModelURL else { return }
         ensureMaterials()
@@ -349,6 +399,30 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
                 model.applyDepthMaskMaterial(mask)
             }
             model.setVisible(true)
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case 5: // Comic Halftone (Pop-Art / Manga)
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+
+        case 6: // Halftone + Inked Outline
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
             if let outline = outlineMaterial {
                 outlineModel.applyOutlineMaterial(outline)
             }
