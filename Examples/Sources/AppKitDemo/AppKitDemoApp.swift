@@ -77,6 +77,11 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             action: #selector(toggleOverlayMenuClicked),
             keyEquivalent: "l"
         ))
+        viewMenu.addItem(NSMenuItem(
+            title: "Toggle Overlay Event Passthrough",
+            action: #selector(toggleOverlayPassthroughMenuClicked),
+            keyEquivalent: "p"
+        ))
         let viewItem = NSMenuItem()
         viewItem.submenu = viewMenu
         mainMenu.addItem(viewItem)
@@ -233,6 +238,10 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
 
     @objc private func toggleOverlayMenuClicked() {
         inspector.toggleOverlayClicked()
+    }
+
+    @objc private func toggleOverlayPassthroughMenuClicked() {
+        inspector.toggleEventPassthrough()
     }
 
     @objc private func pbrShadingMenuClicked() {

@@ -23,9 +23,14 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
     public let pbr: FilamentPBRController
     public let camera: FilamentOrbitCamera
 
+    private var barView: NSVisualEffectView?
+
     public var isClickThrough: Bool {
         get { window.ignoresMouseEvents }
-        set { window.ignoresMouseEvents = newValue }
+        set {
+            window.ignoresMouseEvents = newValue
+            barView?.alphaValue = newValue ? 0.4 : 1.0
+        }
     }
 
     public var onClose: (() -> Void)?
@@ -112,6 +117,7 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
         bar.wantsLayer = true
         bar.layer?.cornerRadius = 14
         bar.layer?.masksToBounds = true
+        self.barView = bar
 
         let stack = NSStackView()
         stack.translatesAutoresizingMaskIntoConstraints = false

@@ -58,6 +58,7 @@ final class DemoSceneController {
     private(set) var outlineMaterial: FilamentToonOutlineMaterial?
     private(set) var depthMaskMaterial: FilamentDepthMaskMaterial?
     public private(set) var overlayWindow: FilamentOverlayWindow?
+    public private(set) var isOverlayEventPassthrough: Bool = false
 
     private var animationTime: Float = 0.0
     private var renderTimer: Timer?
@@ -500,10 +501,23 @@ final class DemoSceneController {
             overlay.setOutlineFlowSpeed(outline.flowAnimationSpeed)
             overlay.setOutlineNoiseScale(outline.noiseScale)
         }
+        overlay.isClickThrough = isOverlayEventPassthrough
         overlay.show()
         overlayWindow = overlay
         onOverlayStateChanged?(true)
         return true
+    }
+
+    func setOverlayEventPassthrough(_ passthrough: Bool) {
+        isOverlayEventPassthrough = passthrough
+        overlayWindow?.isClickThrough = passthrough
+    }
+
+    @discardableResult
+    func toggleOverlayEventPassthrough() -> Bool {
+        let newValue = !isOverlayEventPassthrough
+        setOverlayEventPassthrough(newValue)
+        return newValue
     }
 
     func updateViewport() {

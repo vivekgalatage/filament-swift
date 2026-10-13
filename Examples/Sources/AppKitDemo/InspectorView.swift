@@ -33,6 +33,7 @@ final class InspectorView: NSObject {
     private var outlineColorPopup: NSPopUpButton?
     private var overlayButton: NSButton?
     private var overlayLabel: NSTextField?
+    private var overlayPassthroughCheckbox: NSButton?
 
     private var solidColorRow: NSView!
     private var gradientControlsContainer: NSStackView!
@@ -715,6 +716,16 @@ final class InspectorView: NSObject {
         stack.addArrangedSubview(ovLabel)
         self.overlayLabel = ovLabel
 
+        let passthroughBox = NSButton(
+            checkboxWithTitle: "Event Passthrough (Click-Through)",
+            target: self,
+            action: #selector(toggleEventPassthroughClicked(_:))
+        )
+        passthroughBox.state = scene.isOverlayEventPassthrough ? .on : .off
+        passthroughBox.toolTip = "When enabled, mouse clicks and scrolls pass through the floating companion to desktop apps beneath it."
+        stack.addArrangedSubview(passthroughBox)
+        self.overlayPassthroughCheckbox = passthroughBox
+
         statusBadge = NSTextField(labelWithString: "● Rendering | Orbit: ON")
         statusBadge.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         statusBadge.textColor = .systemGreen
@@ -1126,14 +1137,35 @@ final class InspectorView: NSObject {
     // MARK: - Overlay Window Actions
 
     func syncOverlayUI(active: Bool) {
-        overlayLabel?.stringValue = active ? "Floating Window: Active (Metal Overlay)" : "Floating Window: Closed"
+        let passthrough = scene.isOverlayEventPassthrough
+        let statusText = active
+            ? "Floating Window: Active (Metal Overlay)\(passthrough ? " · Click-Through ON" : "")"
+            : "Floating Window: Closed"
+        overlayLabel?.stringValue = statusText
         overlayLabel?.textColor = active ? .systemGreen : .secondaryLabelColor
         overlayButton?.title = active ? "Close Companion Window" : "Floating Companion Window"
+        overlayPassthroughCheckbox?.state = passthrough ? .on : .off
     }
 
     @objc func toggleOverlayClicked() {
         let active = scene.toggleOverlayWindow()
         syncOverlayUI(active: active)
+    }
+
+    @objc private func toggleEventPassthroughClicked(_ sender: NSButton) {
+        let enabled = sender.state == .on
+        setEventPassthrough(enabled)
+    }
+
+    func setEventPassthrough(_ enabled: Bool) {
+        scene.setOverlayEventPassthrough(enabled)
+        syncOverlayUI(active: scene.overlayWindow != nil)
+    }
+
+    func toggleEventPassthrough() {
+        let newActive = scene.toggleOverlayEventPassthrough()
+        overlayPassthroughCheckbox?.state = newActive ? .on : .off
+        syncOverlayUI(active: scene.overlayWindow != nil)
     }
 
     // MARK: - Outline Color Actions
