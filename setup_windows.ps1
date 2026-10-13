@@ -1,4 +1,4 @@
-# FilamentSwift — Windows Bootstrap & Setup Script
+# FilamentSwift -- Windows Bootstrap & Setup Script
 #
 # Bootstraps everything needed to build and run FilamentSwift, Win32Demo, and
 # WinUI3Demo on Windows (with both SwiftPM and Bazel):
@@ -116,7 +116,7 @@ function Find-WindowsWinmd {
     return $null
 }
 
-Write-Header "FilamentSwift — Windows Setup & Bootstrap"
+Write-Header "FilamentSwift -- Windows Setup and Bootstrap"
 Write-Info "Repository Root: $RepoRoot"
 
 # -----------------------------------------------------------------------------
@@ -166,7 +166,7 @@ if ((Test-Path $filamentHeader) -and -not $Force) {
 # -----------------------------------------------------------------------------
 # 3. Bootstrap SwiftWinRT (TheBrowserCompany.SwiftWinRT 0.6.0)
 # -----------------------------------------------------------------------------
-Write-Step "3/6" "Bootstrapping SwiftWinRT ($SwiftWinRtPackage $SwiftWinRtVersion)..."
+Write-Step "3/6" "Bootstrapping SwiftWinRT $SwiftWinRtPackage $SwiftWinRtVersion..."
 
 $swiftWinRtDir = Join-Path $RepoRoot "WinUIProjections\_tools\swiftwinrt"
 $swiftWinRtExe = Join-Path $swiftWinRtDir "bin\swiftwinrt.exe"
@@ -276,7 +276,7 @@ Write-Header "Windows Setup Complete!"
 Write-Host "Build and run the demos with SwiftPM:" -ForegroundColor White
 Write-Host "  swift run --package-path Examples Win32Demo" -ForegroundColor Yellow
 Write-Host "  swift run --package-path Examples WinUI3Demo" -ForegroundColor Yellow
-Write-Host "`nOr with Bazel:" -ForegroundColor White
+Write-Host "Or with Bazel:" -ForegroundColor White
 Write-Host "  bazel run //Examples:Win32Demo" -ForegroundColor Yellow
 Write-Host "  bazel run //Examples:WinUI3Demo" -ForegroundColor Yellow
 Write-Host ""
