@@ -38,6 +38,8 @@ final class ControlPanel {
     private var animHeader: TextBlock?
     private var animCombo: ComboBox?
     private var studioPresetCombo: ComboBox?
+    private var overlayToggleButton: Button?
+    private var overlayClickThroughToggle: CheckBox?
     private var autoOrbitToggle: CheckBox?
     private var isSyncingAnimations = false
     private var isSyncingBackground = false
@@ -132,9 +134,48 @@ final class ControlPanel {
         root.children.append(reset)
 
         addBackgroundSection()
+        addAssistantOverlaySection()
 
         syncFromSettings()
         syncModelAndAnimations()
+    }
+
+    private func addAssistantOverlaySection() {
+        addSection("Floating Assistant Overlay")
+
+        let toggleBtn = Button()
+        toggleBtn.content = host.isOverlayVisible ? "Hide Floating Assistant" : "Show Floating Assistant"
+        toggleBtn.click.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                self?.host.toggleAssistantOverlay()
+            }
+        }
+        root.children.append(toggleBtn)
+        self.overlayToggleButton = toggleBtn
+
+        let clickCheck = CheckBox()
+        clickCheck.content = "Click-through (pass clicks to desktop)"
+        clickCheck.isChecked = false
+        clickCheck.checked.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.host.setOverlayClickThrough(true) }
+        }
+        clickCheck.unchecked.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.host.setOverlayClickThrough(false) }
+        }
+        root.children.append(clickCheck)
+        self.overlayClickThroughToggle = clickCheck
+
+        let desc = TextBlock()
+        desc.textWrapping = .wrap
+        desc.fontSize = 12
+        desc.foreground = SolidColorBrush(UWP.Color(a: 255, r: 160, g: 165, b: 175))
+        desc.margin = WinUI.Thickness(left: 0, top: 4, right: 0, bottom: 4)
+        desc.text = "Spawns a transparent borderless 3D companion window (press [A]). Floats over ANY application or the desktop with soft per-pixel alpha. Drag with mouse to move!"
+        root.children.append(desc)
+    }
+
+    func syncAssistantOverlayUI() {
+        overlayToggleButton?.content = host.isOverlayVisible ? "Hide Floating Assistant" : "Show Floating Assistant"
     }
 
     private func addBackgroundSection() {

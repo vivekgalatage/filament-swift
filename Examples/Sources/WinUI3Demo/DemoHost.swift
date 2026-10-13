@@ -151,6 +151,11 @@ final class DemoHost {
     private var lastMouseX: Int?
     private var lastMouseY: Int?
 
+    // Floating assistant overlay.
+    private var overlay: FilamentOverlayWindow?
+    public private(set) var isOverlayVisible = false
+    private var currentModelUrl: URL?
+
     // Windows.
     private(set) var topHwnd: HWND!
     private var renderChild: HWND?
@@ -401,6 +406,9 @@ final class DemoHost {
         case WM_KEYDOWN:
             let key = Int(wParam)
             switch key {
+            case 65: // 'A'
+                toggleAssistantOverlay()
+                return 0
             case 66, 84: // 'B' or 'T'
                 cycleNextStudioPreset()
                 return 0
@@ -459,6 +467,14 @@ final class DemoHost {
 
         camera.update(dt: dt)
         hostView.renderFrame()
+
+        if let overlay, isOverlayVisible {
+            overlay.camera.update(dt: dt)
+            if overlay.model.hasAnimations {
+                overlay.model.applyAnimation(time: animationTime)
+            }
+            overlay.renderFrame()
+        }
     }
 
     private func currentMediaTimeSeconds() -> Double {
@@ -470,6 +486,8 @@ final class DemoHost {
     }
 
     private func shutdown() {
+        overlay?.hide()
+        overlay = nil
         hostView?.stopRendering()
         model?.unload()
         model = nil
@@ -482,11 +500,13 @@ final class DemoHost {
     // MARK: - Model + PBR Actions
 
     func loadModel(from url: URL) {
+        currentModelUrl = url
         animationTime = 0
         let asset = ModelAsset(url: url)
         do {
             try model.loadGlb(at: asset.url)
             currentModelName = asset.name
+            try? overlay?.loadModel(from: asset.url)
         } catch {
             print("[WinUI3Demo] Failed to load \(asset.url.path): \(error)")
             model.unload()
@@ -516,6 +536,31 @@ final class DemoHost {
     func pbrSettings() -> FilamentPBRSettings { pbr.settings }
     func mutatePBR(_ body: (inout FilamentPBRSettings) -> Void) { pbr.mutate(body) }
     func resetPBR() { pbr.reset() }
+
+    // MARK: - Floating Assistant Overlay
+
+    func toggleAssistantOverlay() {
+        if overlay == nil {
+            let ov = FilamentOverlayWindow(width: 380, height: 380)
+            if let currentModelUrl {
+                try? ov.loadModel(from: currentModelUrl)
+            }
+            ov.camera.isAutoOrbiting = true
+            overlay = ov
+        }
+
+        isOverlayVisible.toggle()
+        if isOverlayVisible {
+            overlay?.show(atX: 120, y: 120)
+        } else {
+            overlay?.hide()
+        }
+        controlPanel?.syncAssistantOverlayUI()
+    }
+
+    func setOverlayClickThrough(_ enabled: Bool) {
+        overlay?.isClickThrough = enabled
+    }
 
     // MARK: - Studio Background
 

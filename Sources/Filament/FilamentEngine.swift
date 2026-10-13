@@ -378,6 +378,29 @@ public final class FilamentEngine: @unchecked Sendable {
         return Int(FilamentBridge.getColorGradingCount(eng))
     }
 
+    /// Creates a headless swap chain for offscreen rendering.
+    public func createHeadlessSwapChain(width: UInt32, height: UInt32, transparent: Bool = true) -> OpaquePointer? {
+        guard let eng = storage.engine else { return nil }
+        var flags = FilamentBridge.getSwapChainFlagReadable()
+        if transparent {
+            flags |= FilamentBridge.getSwapChainFlagTransparent()
+        }
+        return FilamentBridge.createHeadlessSwapChain(eng, width, height, flags)
+    }
+
+    /// Destroys a headless swap chain.
+    public func destroySwapChain(_ swapChain: OpaquePointer) {
+        guard let eng = storage.engine else { return }
+        FilamentBridge.destroySwapChain(eng, swapChain)
+    }
+
+    /// Reads pixels from the current frame into the provided buffer.
+    public func readPixels(x: UInt32 = 0, y: UInt32 = 0, width: UInt32, height: UInt32,
+                           into buffer: UnsafeMutableRawPointer, bufferSize: Int) -> Bool {
+        guard let eng = storage.engine, let ren = storage.renderer else { return false }
+        return FilamentBridge.readPixels(eng, ren, x, y, width, height, buffer, bufferSize)
+    }
+
     private func currentCamera(_ engine: OpaquePointer) -> OpaquePointer? {
         FilamentBridge.getCamera(engine, FilamentBridge.entityFromId(storage.cameraId))
     }

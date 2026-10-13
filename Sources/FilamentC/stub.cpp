@@ -17,9 +17,13 @@
 #include <gltfio/FilamentInstance.h>
 #include <gltfio/TextureProvider.h>
 
-#include <math/quat.h>
+#include <filament/Fence.h>
+#include <filament/RenderableManager.h>
+#include <backend/PixelBufferDescriptor.h>
 
 #include <algorithm>
+#include <cstring>
+#include <vector>
 
 #include "FilamentBridge.h"
 
@@ -61,8 +65,16 @@ namespace FilamentBridge {
         return engine->createSwapChain(nativeWindow, flags);
     }
 
+    filament::SwapChain* createHeadlessSwapChain(filament::Engine* engine, uint32_t width, uint32_t height, uint64_t flags) {
+        return engine->createSwapChain(width, height, flags);
+    }
+
     uint64_t getSwapChainFlagTransparent() {
         return filament::SwapChain::CONFIG_TRANSPARENT;
+    }
+
+    uint64_t getSwapChainFlagReadable() {
+        return filament::SwapChain::CONFIG_READABLE;
     }
 
     void destroySwapChain(filament::Engine* engine, filament::SwapChain* swapChain) {
@@ -355,6 +367,27 @@ namespace FilamentBridge {
         renderer->endFrame();
     }
 
+    bool readPixels(filament::Engine* engine, filament::Renderer* renderer,
+                    uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                    void* outBuffer, size_t bufferSize) {
+        if (!engine || !renderer || !outBuffer) return false;
+        size_t requiredSize = static_cast<size_t>(width) * height * 4;
+        if (bufferSize < requiredSize) return false;
+
+        filament::backend::PixelBufferDescriptor pbd(
+            outBuffer, requiredSize,
+            filament::backend::PixelDataFormat::RGBA,
+            filament::backend::PixelDataType::UBYTE
+        );
+        renderer->readPixels(x, y, width, height, std::move(pbd));
+        auto* fence = engine->createFence();
+        if (fence) {
+            filament::Fence::waitAndDestroy(fence, filament::Fence::Mode::FLUSH);
+            return true;
+        }
+        return false;
+    }
+
     GlbContext* loadGlbFromMemory(filament::Engine* engine, filament::Scene* scene, const uint8_t* data, size_t size) {
         if (!engine || !scene || !data || size == 0) return nullptr;
 
@@ -455,6 +488,71 @@ namespace FilamentBridge {
         auto* animator = inst->getAnimator();
         if (!animator) return;
         animator->resetBoneMatrices();
+    }
+
+    size_t getMorphTargetCount(GlbContext* ctx) {
+        if (!ctx || !ctx->asset) return 0;
+        size_t total = 0;
+        const auto* entities = ctx->asset->getEntities();
+        size_t count = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < count; ++i) {
+            total += ctx->asset->getMorphTargetCountAt(entities[i]);
+        }
+        return total;
+    }
+
+    const char* getMorphTargetName(GlbContext* ctx, size_t index) {
+        if (!ctx || !ctx->asset) return nullptr;
+        size_t running = 0;
+        const auto* entities = ctx->asset->getEntities();
+        size_t count = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < count; ++i) {
+            size_t entityTargets = ctx->asset->getMorphTargetCountAt(entities[i]);
+            if (index < running + entityTargets) {
+                return ctx->asset->getMorphTargetNameAt(entities[i], index - running);
+            }
+            running += entityTargets;
+        }
+        return nullptr;
+    }
+
+    void setMorphWeight(filament::Engine* engine, GlbContext* ctx, size_t index, float weight) {
+        if (!engine || !ctx || !ctx->asset) return;
+        auto& rcm = engine->getRenderableManager();
+        size_t running = 0;
+        const auto* entities = ctx->asset->getEntities();
+        size_t count = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < count; ++i) {
+            size_t entityTargets = ctx->asset->getMorphTargetCountAt(entities[i]);
+            if (index < running + entityTargets) {
+                auto inst = rcm.getInstance(entities[i]);
+                if (inst) {
+                    size_t targetIdx = index - running;
+                    rcm.setMorphWeights(inst, &weight, 1, targetIdx);
+                }
+                return;
+            }
+            running += entityTargets;
+        }
+    }
+
+    void setMorphWeightByName(filament::Engine* engine, GlbContext* ctx, const char* name, float weight) {
+        if (!engine || !ctx || !ctx->asset || !name) return;
+        auto& rcm = engine->getRenderableManager();
+        const auto* entities = ctx->asset->getEntities();
+        size_t count = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < count; ++i) {
+            size_t entityTargets = ctx->asset->getMorphTargetCountAt(entities[i]);
+            for (size_t t = 0; t < entityTargets; ++t) {
+                const char* targetName = ctx->asset->getMorphTargetNameAt(entities[i], t);
+                if (targetName && strcmp(targetName, name) == 0) {
+                    auto inst = rcm.getInstance(entities[i]);
+                    if (inst) {
+                        rcm.setMorphWeights(inst, &weight, 1, t);
+                    }
+                }
+            }
+        }
     }
 
     void destroyGlbContext(filament::Engine* engine, filament::Scene* scene, GlbContext* ctx) {

@@ -13,6 +13,16 @@ public struct FilamentAnimation: Sendable, Identifiable, Equatable {
     }
 }
 
+public struct FilamentMorphTarget: Sendable, Identifiable, Equatable {
+    public let id: Int
+    public let name: String
+
+    public init(id: Int, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
 /// Manages glTF 2.0 / GLB 3D assets loaded via Google Filament gltfio.
 ///
 /// The engine is retained strongly: Filament asserts if the engine is destroyed while
@@ -41,6 +51,7 @@ public final class FilamentModel {
     }
 
     public private(set) var animations: [FilamentAnimation] = []
+    public private(set) var morphTargets: [FilamentMorphTarget] = []
 
     /// Index of the animation applied by `applyAnimation(time:)`, or `nil` when disabled.
     /// Assign through `selectAnimation(at:)`, which validates the range.
@@ -54,6 +65,10 @@ public final class FilamentModel {
 
     public var hasAnimations: Bool {
         return !animations.isEmpty
+    }
+
+    public var hasMorphTargets: Bool {
+        return !morphTargets.isEmpty
     }
 
     public var activeAnimationDuration: Float {
@@ -88,6 +103,7 @@ public final class FilamentModel {
         }
         glbContext = nil
         animations.removeAll()
+        morphTargets.removeAll()
         activeAnimationIndex = nil
     }
 
@@ -106,6 +122,20 @@ public final class FilamentModel {
     public func applyAnimation(time: Float) {
         guard let ctx = glbContext, let idx = activeAnimationIndex, idx >= 0, idx < animations.count else { return }
         FilamentBridge.applyAnimation(ctx, idx, time)
+    }
+
+    /// Sets the weight (typically 0.0 to 1.0) of a blend shape / morph target by index.
+    public func setBlendShape(index: Int, weight: Float) {
+        guard let eng = engineRef.engine, let ctx = glbContext else { return }
+        FilamentBridge.setMorphWeight(eng, ctx, index, weight)
+    }
+
+    /// Sets the weight (typically 0.0 to 1.0) of a blend shape / morph target by name.
+    public func setBlendShape(name: String, weight: Float) {
+        guard let eng = engineRef.engine, let ctx = glbContext else { return }
+        name.withCString { cStr in
+            FilamentBridge.setMorphWeightByName(eng, ctx, cStr, weight)
+        }
     }
 
     /// Loads a binary GLB file from disk.
@@ -132,6 +162,7 @@ public final class FilamentModel {
             }
             self.glbContext = loadedCtx
             refreshAnimations()
+            refreshMorphTargets()
         }
     }
 
@@ -150,6 +181,18 @@ public final class FilamentModel {
             animations.append(FilamentAnimation(id: i, name: name, duration: duration))
         }
         activeAnimationIndex = animations.isEmpty ? nil : 0
+    }
+
+    private func refreshMorphTargets() {
+        morphTargets.removeAll()
+        guard let ctx = glbContext else { return }
+        let count = FilamentBridge.getMorphTargetCount(ctx)
+        for i in 0..<count {
+            let cName = FilamentBridge.getMorphTargetName(ctx, i)
+            let rawName = (cName != nil && cName![0] != 0) ? String(cString: cName!) : ""
+            let name = rawName.isEmpty ? "MorphTarget \(i + 1)" : rawName
+            morphTargets.append(FilamentMorphTarget(id: i, name: name))
+        }
     }
 
     /// Rotates the model around the Y axis in radians and scales it to fit the unit view frustum.

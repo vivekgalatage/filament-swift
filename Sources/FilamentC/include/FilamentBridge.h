@@ -62,7 +62,9 @@ namespace FilamentBridge {
     void destroyView(filament::Engine* engine, filament::View* view);
 
     filament::SwapChain* createSwapChain(filament::Engine* engine, void* nativeWindow, uint64_t flags = 0);
+    filament::SwapChain* createHeadlessSwapChain(filament::Engine* engine, uint32_t width, uint32_t height, uint64_t flags = 0);
     uint64_t getSwapChainFlagTransparent();
+    uint64_t getSwapChainFlagReadable();
     void destroySwapChain(filament::Engine* engine, filament::SwapChain* swapChain);
 
     utils::Entity createCamera(filament::Engine* engine);
@@ -154,6 +156,9 @@ namespace FilamentBridge {
     bool beginFrame(filament::Renderer* renderer, filament::SwapChain* swapChain);
     void renderView(filament::Renderer* renderer, filament::View* view);
     void endFrame(filament::Renderer* renderer);
+    bool readPixels(filament::Engine* engine, filament::Renderer* renderer,
+                    uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                    void* outBuffer, size_t bufferSize);
 
     struct GlbContext {
         filament::gltfio::MaterialProvider* materials = nullptr;
@@ -170,6 +175,10 @@ namespace FilamentBridge {
     float getAnimationDuration(GlbContext* ctx, size_t index);
     void applyAnimation(GlbContext* ctx, size_t index, float timeInSeconds);
     void resetBoneMatrices(GlbContext* ctx);
+    size_t getMorphTargetCount(GlbContext* ctx);
+    const char* getMorphTargetName(GlbContext* ctx, size_t index);
+    void setMorphWeight(filament::Engine* engine, GlbContext* ctx, size_t index, float weight);
+    void setMorphWeightByName(filament::Engine* engine, GlbContext* ctx, const char* name, float weight);
     void destroyGlbContext(filament::Engine* engine, filament::Scene* scene, GlbContext* ctx);
 
 } // namespace FilamentBridge
