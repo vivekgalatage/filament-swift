@@ -23,6 +23,9 @@ final class GTKSceneController {
     private var isAttached = false
     private var hasPrintedDisplayWarning = false
 
+    private var pixelBuffer: [UInt8] = []
+    public private(set) var activeModelUrl: URL?
+
     init(drawingArea: OpaquePointer?) {
         self.drawingArea = drawingArea
         let view = FilamentGTKView()
@@ -36,107 +39,44 @@ final class GTKSceneController {
         }
     }
 
-    // MARK: - X11 Surface Attachment & Resizing
+    // MARK: - Offscreen Headless Swap Chain & Cairo Drawing
 
     func attachSwapChainIfPossible() {
         guard !isAttached, let drawingArea else { return }
         guard gtk_widget_get_realized(drawingArea) != 0 else { return }
 
-        syncSurfaceSize()
+        let w = UInt32(max(1, gtk_widget_get_width(drawingArea)))
+        let h = UInt32(max(1, gtk_widget_get_height(drawingArea)))
+        guard w >= 50, h >= 50 else { return }
 
-        guard let display = gdk_display_get_default() else {
-            if !hasPrintedDisplayWarning {
-                hasPrintedDisplayWarning = true
-                print("[GTK4Demo] No default GDK display; cannot create a Filament surface.")
-            }
-            return
-        }
-
-        let getXDisplay = lookupSymbol("gdk_x11_display_get_xdisplay", as: (@convention(c) (OpaquePointer?) -> UnsafeMutableRawPointer?).self)
-            ?? lookupSymbol("gdk_x11_get_xdisplay", as: (@convention(c) (OpaquePointer?) -> UnsafeMutableRawPointer?).self)
-
-        guard let getXDisplay else {
-            if !hasPrintedDisplayWarning {
-                hasPrintedDisplayWarning = true
-                print("[GTK4Demo] This GDK build does not export gdk_x11_display_get_xdisplay.")
-            }
-            return
-        }
-
-        guard let xdisplay = getXDisplay(display) else {
-            if !hasPrintedDisplayWarning {
-                hasPrintedDisplayWarning = true
-                let getDisplayName = lookupSymbol(
-                    "gdk_display_get_name",
-                    as: (@convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?).self
-                )
-                let displayName = getDisplayName?(display).map { String(cString: $0) } ?? "unknown"
-                print("[GTK4Demo] Filament requires an X11 GDK backend on Linux (current display: \(displayName)). Run with GDK_BACKEND=x11.")
-            }
-            return
-        }
-
-        guard
-            let getNative = lookupSymbol("gtk_widget_get_native", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self),
-            let getSurface = lookupSymbol("gtk_native_get_surface", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self),
-            let getXid = lookupSymbol("gdk_x11_surface_get_xid", as: (@convention(c) (OpaquePointer?) -> UInt).self)
-                ?? lookupSymbol("gdk_x11_window_get_xid", as: (@convention(c) (OpaquePointer?) -> UInt).self)
-        else {
-            if !hasPrintedDisplayWarning {
-                hasPrintedDisplayWarning = true
-                print("[GTK4Demo] Failed to locate native GTK4/GDK surface resolution symbols.")
-            }
-            return
-        }
-
-        guard
-            let native = getNative(drawingArea),
-            let surface = getSurface(native)
-        else {
-            if !hasPrintedDisplayWarning {
-                hasPrintedDisplayWarning = true
-                print("[GTK4Demo] Could not resolve the native X11 window handle.")
-            }
-            return
-        }
-
-        let xid = getXid(surface)
-        guard xid != 0, let handle = UnsafeMutableRawPointer(bitPattern: xid) else {
-            if !hasPrintedDisplayWarning {
-                hasPrintedDisplayWarning = true
-                print("[GTK4Demo] Native window handle is invalid (xid=\(xid)).")
-            }
-            return
-        }
-
-        if hostView.attach(nativeWindow: handle, width: currentWidth, height: currentHeight) {
+        currentWidth = w
+        currentHeight = h
+        if hostView.attachHeadless(width: currentWidth, height: currentHeight) {
             isAttached = true
-            print("[GTK4Demo] Filament swap chain attached (xdisplay=\(xdisplay), xid=\(xid), \(currentWidth)x\(currentHeight)).")
-        } else {
-            if !hasPrintedDisplayWarning {
-                hasPrintedDisplayWarning = true
-                print("[GTK4Demo] Filament failed to create a swap chain for xid=\(xid).")
-            }
+            pixelBuffer = [UInt8](repeating: 0, count: Int(currentWidth * currentHeight * 4))
+            print("[GTK4Demo] Filament headless swap chain attached (\(currentWidth)x\(currentHeight)).")
         }
     }
 
-    private func syncSurfaceSize() {
-        guard let drawingArea else { return }
-        let nativeLookup = lookupSymbol("gtk_widget_get_native", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self)
-        let surfaceLookup = lookupSymbol("gtk_native_get_surface", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self)
-        guard
-            let nativeLookup,
-            let surfaceLookup,
-            let native = nativeLookup(drawingArea),
-            let surface = surfaceLookup(native)
-        else { return }
-        currentWidth = UInt32(max(1, gdk_surface_get_width(surface)))
-        currentHeight = UInt32(max(1, gdk_surface_get_height(surface)))
+    func draw(cr: OpaquePointer?) {
+        guard let cr, isAttached, !pixelBuffer.isEmpty else { return }
+        let w = Int32(currentWidth)
+        let h = Int32(currentHeight)
+        let stride = w * 4
+
+        pixelBuffer.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+            guard let surface = cairo_image_surface_create_for_data(base, CAIRO_FORMAT_ARGB32, w, h, stride) else { return }
+            cairo_set_source_surface(cr, surface, 0.0, 0.0)
+            cairo_paint(cr)
+            cairo_surface_destroy(surface)
+        }
     }
 
     // MARK: - Models, Animations & Camera Input
 
     func openModel(at url: URL) {
+        self.activeModelUrl = url
         let asset = ModelAsset(url: url)
         animationTime = 0.0
 
@@ -201,11 +141,15 @@ final class GTKSceneController {
 
         attachSwapChainIfPossible()
 
-        let previousWidth = currentWidth
-        let previousHeight = currentHeight
-        syncSurfaceSize()
-        if isAttached && (previousWidth != currentWidth || previousHeight != currentHeight) {
-            hostView.resize(width: currentWidth, height: currentHeight)
+        if let drawingArea, isAttached {
+            let w = UInt32(max(1, gtk_widget_get_width(drawingArea)))
+            let h = UInt32(max(1, gtk_widget_get_height(drawingArea)))
+            if w >= 50, h >= 50, (w != currentWidth || h != currentHeight) {
+                currentWidth = w
+                currentHeight = h
+                hostView.resize(width: currentWidth, height: currentHeight)
+                pixelBuffer = [UInt8](repeating: 0, count: Int(currentWidth * currentHeight * 4))
+            }
         }
 
         if isAnimationPlaying, model.hasAnimations {
@@ -218,7 +162,49 @@ final class GTKSceneController {
         }
 
         camera.update(dt: dt)
-        hostView.renderFrame()
+
+        if isAttached, hostView.renderFrame() {
+            let bufferSize = pixelBuffer.count
+            let readOk = pixelBuffer.withUnsafeMutableBytes { ptr -> Bool in
+                guard let base = ptr.baseAddress else { return false }
+                return hostView.readPixels(into: base, bufferSize: bufferSize)
+            }
+            if readOk, let drawingArea {
+                convertRGBAToCairoARGB32()
+                gtk_widget_queue_draw(drawingArea)
+            }
+        }
+    }
+
+    private func convertRGBAToCairoARGB32() {
+        let pixelCount = Int(currentWidth * currentHeight)
+        pixelBuffer.withUnsafeMutableBufferPointer { buf in
+            guard let ptr = buf.baseAddress else { return }
+            var idx = 0
+            for _ in 0..<pixelCount {
+                let r = ptr[idx + 0]
+                let g = ptr[idx + 1]
+                let b = ptr[idx + 2]
+                let a = ptr[idx + 3]
+
+                if a == 255 {
+                    ptr[idx + 0] = b
+                    ptr[idx + 1] = g
+                    ptr[idx + 2] = r
+                } else if a == 0 {
+                    ptr[idx + 0] = 0
+                    ptr[idx + 1] = 0
+                    ptr[idx + 2] = 0
+                    ptr[idx + 3] = 0
+                } else {
+                    let scale = Float(a) / 255.0
+                    ptr[idx + 0] = UInt8(Float(b) * scale)
+                    ptr[idx + 1] = UInt8(Float(g) * scale)
+                    ptr[idx + 2] = UInt8(Float(r) * scale)
+                }
+                idx += 4
+            }
+        }
     }
 
     func shutdown() {

@@ -259,7 +259,9 @@ targets.append(.target(
     dependencies: ["Filament", "FilamentC"],
     path: "Sources/FilamentGTK",
     swiftSettings: filamentSwiftSettings,
-    linkerSettings: filamentLinkerSettings
+    linkerSettings: filamentLinkerSettings + [
+        .linkedLibrary("X11"),
+    ]
 ))
 #endif
 

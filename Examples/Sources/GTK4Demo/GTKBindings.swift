@@ -202,6 +202,48 @@ func gtk_event_controller_scroll_new(_ flags: Int32) -> OpaquePointer?
 @_silgen_name("gtk_widget_add_controller")
 func gtk_widget_add_controller(_ widget: OpaquePointer?, _ controller: OpaquePointer?)
 
+@_silgen_name("gtk_drawing_area_set_draw_func")
+func gtk_drawing_area_set_draw_func(
+    _ drawing_area: OpaquePointer?,
+    _ draw_func: (@convention(c) (OpaquePointer?, OpaquePointer?, Int32, Int32, UnsafeMutableRawPointer?) -> Void)?,
+    _ user_data: UnsafeMutableRawPointer?,
+    _ destroy: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
+)
+
+@_silgen_name("gtk_widget_queue_draw")
+func gtk_widget_queue_draw(_ widget: OpaquePointer?)
+
+@_silgen_name("gtk_widget_get_width")
+func gtk_widget_get_width(_ widget: OpaquePointer?) -> Int32
+
+@_silgen_name("gtk_widget_get_height")
+func gtk_widget_get_height(_ widget: OpaquePointer?) -> Int32
+
+// MARK: - Cairo 2D Interop Bindings
+
+let CAIRO_FORMAT_ARGB32: Int32 = 0
+
+@_silgen_name("cairo_image_surface_create_for_data")
+func cairo_image_surface_create_for_data(
+    _ data: UnsafeMutablePointer<UInt8>?,
+    _ format: Int32,
+    _ width: Int32,
+    _ height: Int32,
+    _ stride: Int32
+) -> OpaquePointer?
+
+@_silgen_name("cairo_set_source_surface")
+func cairo_set_source_surface(_ cr: OpaquePointer?, _ surface: OpaquePointer?, _ x: Double, _ y: Double)
+
+@_silgen_name("cairo_paint")
+func cairo_paint(_ cr: OpaquePointer?)
+
+@_silgen_name("cairo_surface_destroy")
+func cairo_surface_destroy(_ surface: OpaquePointer?)
+
+@_silgen_name("cairo_surface_flush")
+func cairo_surface_flush(_ surface: OpaquePointer?)
+
 // MARK: - GTK Constants & Symbol Lookup
 
 let GTK_ORIENTATION_HORIZONTAL: Int32 = 0

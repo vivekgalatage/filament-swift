@@ -197,6 +197,7 @@ targets.append(.executableTarget(
         .linkedLibrary("gobject-2.0"),
         .linkedLibrary("glib-2.0"),
         .linkedLibrary("X11"),
+        .linkedLibrary("cairo"),
         .linkedLibrary("c++"),
         .linkedLibrary("c++abi"),
         .linkedLibrary("pthread"),

@@ -9,6 +9,7 @@ final class GTK4DemoApp {
     private var window: OpaquePointer?
     private var scene: GTKSceneController?
     private var controlPanel: GTKControlPanel?
+    private var overlayWindow: FilamentOverlayWindow?
 
     func run() {
         print("[GTK4Demo] Starting GTK 4 application...")
@@ -94,10 +95,22 @@ final class GTK4DemoApp {
             0
         )
 
+        let drawCallback: @convention(c) (OpaquePointer?, OpaquePointer?, Int32, Int32, UnsafeMutableRawPointer?) -> Void = { _, cr, _, _, userData in
+            guard let userData, let cr else { return }
+            let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
+            MainActor.assumeIsolated {
+                selfApp.scene?.draw(cr: cr)
+            }
+        }
+        gtk_drawing_area_set_draw_func(drawingArea, drawCallback, selfPtr, nil)
+
         let tickCallback: @convention(c) (OpaquePointer?, OpaquePointer?, UnsafeMutableRawPointer?) -> Int32 = { _, _, userData in
             guard let userData else { return 1 }
             let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
-            MainActor.assumeIsolated { selfApp.scene?.onFrameTick() }
+            MainActor.assumeIsolated {
+                selfApp.scene?.onFrameTick()
+                selfApp.overlayWindow?.renderFrame()
+            }
             return 1 // G_SOURCE_CONTINUE
         }
         _ = gtk_widget_add_tick_callback(drawingArea, tickCallback, selfPtr, nil)
@@ -113,9 +126,11 @@ final class GTK4DemoApp {
         let openBtn = gtk_button_new_with_label("Open Model…")
         let resetCamBtn = gtk_button_new_with_label("Reset View")
         let animBtn = gtk_button_new_with_label("Cycle Anim")
+        let overlayBtn = gtk_button_new_with_label("Floating Overlay")
 
         gtk_header_bar_pack_start(headerBar, openBtn)
         gtk_header_bar_pack_start(headerBar, resetCamBtn)
+        gtk_header_bar_pack_end(headerBar, overlayBtn)
         gtk_header_bar_pack_end(headerBar, animBtn)
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -140,6 +155,13 @@ final class GTK4DemoApp {
             MainActor.assumeIsolated { selfApp.scene?.cycleNextAnimation() }
         }
         g_signal_connect_data(animBtn, "clicked", unsafeBitCast(animClicked, to: (@convention(c) () -> Void).self), selfPtr, nil, 0)
+
+        let overlayClicked: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
+            guard let userData else { return }
+            let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
+            MainActor.assumeIsolated { selfApp.toggleOverlay() }
+        }
+        g_signal_connect_data(overlayBtn, "clicked", unsafeBitCast(overlayClicked, to: (@convention(c) () -> Void).self), selfPtr, nil, 0)
     }
 
     /// Attaches GTK 4 drag and scroll controllers to `drawingArea` for interactive Orbit, Pan, and Zoom.
@@ -210,7 +232,32 @@ final class GTK4DemoApp {
         }
     }
 
+    private func toggleOverlay() {
+        if let existing = overlayWindow {
+            existing.hide()
+            self.overlayWindow = nil
+            print("[GTK4Demo] Floating companion overlay closed.")
+            return
+        }
+
+        print("[GTK4Demo] Launching transparent floating companion overlay...")
+        let overlay = FilamentOverlayWindow(width: 420, height: 560, initialX: 120, initialY: 120)
+        let modelUrl = scene?.activeModelUrl ?? ModelDiscovery.discoverModels().first?.url
+        if let modelUrl {
+            do {
+                try overlay.loadModel(from: modelUrl)
+            } catch {
+                print("[GTK4Demo] Failed to load model for overlay: \(error)")
+            }
+        }
+        overlay.show()
+        self.overlayWindow = overlay
+        print("[GTK4Demo] Floating companion overlay active across desktop (borderless, transparent).")
+    }
+
     private func shutdown() {
+        overlayWindow?.hide()
+        overlayWindow = nil
         scene?.shutdown()
         scene = nil
         controlPanel = nil

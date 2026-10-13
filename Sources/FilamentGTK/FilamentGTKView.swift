@@ -8,11 +8,12 @@ import FilamentC
 public final class FilamentGTKView {
     public let engine: FilamentEngine
     public private(set) var nativeWindow: UnsafeMutableRawPointer?
+    public private(set) var isHeadless = false
     private let swapChainBox = FilamentSwapChainBox()
     private var swapChain: OpaquePointer? { swapChainBox.handle }
     private var isRendering = false
-    private var currentWidth: UInt32 = 1
-    private var currentHeight: UInt32 = 1
+    public private(set) var currentWidth: UInt32 = 1
+    public private(set) var currentHeight: UInt32 = 1
 
     public var isTransparent: Bool = false {
         didSet {
@@ -48,6 +49,7 @@ public final class FilamentGTKView {
     @discardableResult
     public func attach(nativeWindow: UnsafeMutableRawPointer, width: UInt32, height: UInt32) -> Bool {
         self.nativeWindow = nativeWindow
+        self.isHeadless = false
         currentWidth = max(1, width)
         currentHeight = max(1, height)
         guard let eng = engine.engine else { return false }
@@ -63,7 +65,37 @@ public final class FilamentGTKView {
         if created == nil {
             print("[FilamentGTKView] Swap chain creation failed for the supplied native handle.")
         }
-        resize(width: currentWidth, height: currentHeight)
+        updateViewportAndCamera()
+        return created != nil
+    }
+
+    /// Attaches an offscreen headless swap chain for integration with GTK 4 drawing areas / Cairo.
+    ///
+    /// Offscreen rendering completely avoids GPU/Vulkan surface conflicts with GTK 4's GSK renderer.
+    /// - Returns: `true` when the headless swap chain was created.
+    @discardableResult
+    public func attachHeadless(width: UInt32, height: UInt32) -> Bool {
+        self.nativeWindow = nil
+        self.isHeadless = true
+        currentWidth = max(1, width)
+        currentHeight = max(1, height)
+        guard let eng = engine.engine else { return false }
+
+        if let old = swapChain {
+            FilamentBridge.destroySwapChain(eng, old)
+            swapChainBox.set(nil)
+        }
+
+        var flags = FilamentBridge.getSwapChainFlagReadable()
+        if isTransparent {
+            flags |= FilamentBridge.getSwapChainFlagTransparent()
+        }
+        let created = FilamentBridge.createHeadlessSwapChain(eng, currentWidth, currentHeight, flags)
+        swapChainBox.set(created)
+        if created == nil {
+            print("[FilamentGTKView] Headless swap chain creation failed (\(currentWidth)x\(currentHeight)).")
+        }
+        updateViewportAndCamera()
         return created != nil
     }
 
@@ -71,12 +103,37 @@ public final class FilamentGTKView {
     public func resize(width: UInt32, height: UInt32) {
         let w = max(1, width)
         let h = max(1, height)
+        let sizeChanged = (w != currentWidth || h != currentHeight)
         currentWidth = w
         currentHeight = h
-        if let v = engine.view {
-            FilamentBridge.setViewport(v, 0, 0, w, h)
+
+        if isHeadless && sizeChanged {
+            guard let eng = engine.engine else { return }
+            if let old = swapChain {
+                FilamentBridge.destroySwapChain(eng, old)
+                swapChainBox.set(nil)
+            }
+            var flags = FilamentBridge.getSwapChainFlagReadable()
+            if isTransparent {
+                flags |= FilamentBridge.getSwapChainFlagTransparent()
+            }
+            let created = FilamentBridge.createHeadlessSwapChain(eng, w, h, flags)
+            swapChainBox.set(created)
         }
-        engine.setCameraProjection(fovInDegrees: 45.0, aspect: Double(w) / Double(h))
+
+        updateViewportAndCamera()
+    }
+
+    private func updateViewportAndCamera() {
+        if let v = engine.view {
+            FilamentBridge.setViewport(v, 0, 0, currentWidth, currentHeight)
+        }
+        engine.setCameraProjection(fovInDegrees: 45.0, aspect: Double(currentWidth) / Double(currentHeight))
+    }
+
+    /// Reads pixels from the rendered frame into the supplied memory buffer.
+    public func readPixels(into buffer: UnsafeMutableRawPointer, bufferSize: Int) -> Bool {
+        engine.readPixels(width: currentWidth, height: currentHeight, into: buffer, bufferSize: bufferSize)
     }
 
     /// `true` once a swap chain has been created successfully.
@@ -106,7 +163,10 @@ public final class FilamentGTKView {
     }
 
     private func recreateSwapChain() {
-        guard let nw = nativeWindow else { return }
-        attach(nativeWindow: nw, width: currentWidth, height: currentHeight)
+        if let nw = nativeWindow {
+            attach(nativeWindow: nw, width: currentWidth, height: currentHeight)
+        } else if isHeadless {
+            attachHeadless(width: currentWidth, height: currentHeight)
+        }
     }
 }
