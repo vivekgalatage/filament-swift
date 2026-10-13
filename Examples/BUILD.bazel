@@ -46,9 +46,12 @@ cc_library(
         "@platforms//os:windows": [
             "user32.lib",
             "gdi32.lib",
+            "opengl32.lib",
+            "shlwapi.lib",
             "ole32.lib",
             "shell32.lib",
             "comdlg32.lib",
+            "dwmapi.lib",
         ],
         "//conditions:default": [],
     }),

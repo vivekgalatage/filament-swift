@@ -301,7 +301,7 @@ final class Win32ControlPanel {
 
     func layoutControls() {
         var rect = RECT()
-        guard GetClientRect(panelHwnd, &rect) else { return }
+        guard win32GetClientRect(UnsafeRawPointer(panelHwnd), &rect) != 0 else { return }
 
         let pad: Int32 = 10
         let gap: Int32 = 4

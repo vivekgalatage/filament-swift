@@ -200,22 +200,26 @@ cc_library(
     name = "filament",
     hdrs = glob(["include/**/*.h"], allow_empty = True),
     includes = ["include"],
-    srcs = glob([
-        "{lib_dir}/**/filament.lib",
-        "{lib_dir}/**/backend.lib",
-        "{lib_dir}/**/bluevk.lib",
-        "{lib_dir}/**/bluegl.lib",
-        "{lib_dir}/**/filabridge.lib",
-        "{lib_dir}/**/filaflat.lib",
-        "{lib_dir}/**/utils.lib",
-        "{lib_dir}/**/geometry.lib",
-        "{lib_dir}/**/smol-v.lib",
-        "{lib_dir}/**/ibl.lib",
-    ], allow_empty = True),
+    srcs = [
+        "{lib_dir}/filament.lib",
+        "{lib_dir}/backend.lib",
+        "{lib_dir}/bluevk.lib",
+        "{lib_dir}/bluegl.lib",
+        "{lib_dir}/filabridge.lib",
+        "{lib_dir}/filaflat.lib",
+        "{lib_dir}/utils.lib",
+        "{lib_dir}/geometry.lib",
+        "{lib_dir}/smol-v.lib",
+        "{lib_dir}/ibl.lib",
+    ],
     linkopts = [
         "gdi32.lib",
         "user32.lib",
         "opengl32.lib",
+        "shlwapi.lib",
+        "dwmapi.lib",
+        "ole32.lib",
+        "shell32.lib",
     ],
 )
 
@@ -223,18 +227,18 @@ cc_library(
     name = "gltfio",
     hdrs = glob(["include/**/*.h"], allow_empty = True),
     includes = ["include"],
-    srcs = glob([
-        "{lib_dir}/**/gltfio.lib",
-        "{lib_dir}/**/gltfio_core.lib",
-        "{lib_dir}/**/dracodec.lib",
-        "{lib_dir}/**/basis_transcoder.lib",
-        "{lib_dir}/**/meshoptimizer.lib",
-        "{lib_dir}/**/uberarchive.lib",
-        "{lib_dir}/**/uberzlib.lib",
-        "{lib_dir}/**/zstd.lib",
-        "{lib_dir}/**/stb.lib",
-        "{lib_dir}/**/ktxreader.lib",
-    ], allow_empty = True),
+    srcs = [
+        "{lib_dir}/gltfio.lib",
+        "{lib_dir}/gltfio_core.lib",
+        "{lib_dir}/dracodec.lib",
+        "{lib_dir}/basis_transcoder.lib",
+        "{lib_dir}/meshoptimizer.lib",
+        "{lib_dir}/uberarchive.lib",
+        "{lib_dir}/uberzlib.lib",
+        "{lib_dir}/zstd.lib",
+        "{lib_dir}/stb.lib",
+        "{lib_dir}/ktxreader.lib",
+    ],
     deps = [":filament"],
 )
 
@@ -325,6 +329,9 @@ def _filament_repo_impl(repository_ctx):
             if repository_ctx.path(cand).exists:
                 lib_dir = cand
                 break
+
+    if is_windows and repository_ctx.path(lib_dir + "/md").exists:
+        lib_dir = lib_dir + "/md"
 
     if is_macos:
         content = _build_mac(lib_dir)

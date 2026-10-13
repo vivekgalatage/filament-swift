@@ -2,6 +2,9 @@ import WinSDK
 import Filament
 import FilamentC
 
+@_silgen_name("GetClientRect")
+private func win32GetClientRect(_ hWnd: UnsafeRawPointer?, _ lpRect: UnsafeMutablePointer<RECT>) -> Int32
+
 /// Pure Win32 host view for Google Filament on Windows.
 ///
 /// Manages the Filament `SwapChain` lifecycle attached to a plain Win32 `HWND`
@@ -90,7 +93,7 @@ public final class FilamentWin32View {
     public func syncViewportWithWindow() -> Bool {
         guard let hwnd else { return false }
         var clientRect = RECT()
-        guard GetClientRect(hwnd, &clientRect) else { return false }
+        guard win32GetClientRect(UnsafeRawPointer(hwnd), &clientRect) != 0 else { return false }
         let width = UInt32(max(1, clientRect.right - clientRect.left))
         let height = UInt32(max(1, clientRect.bottom - clientRect.top))
         resize(width: width, height: height)

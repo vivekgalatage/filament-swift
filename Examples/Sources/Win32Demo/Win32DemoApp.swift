@@ -28,7 +28,7 @@ final class Win32DemoApp {
     func run() {
         Self.shared = self
         print("[Win32Demo] Initializing Win32 host window...")
-        CoInitializeEx(nil, COINIT_APARTMENTTHREADED)
+        _ = win32CoInitializeEx(nil, COINIT_APARTMENTTHREADED_VALUE)
         defer { CoUninitialize() }
 
         guard registerWindowClasses() else {
@@ -196,7 +196,7 @@ final class Win32DemoApp {
         guard let hwnd else { return }
 
         var clientRect = RECT()
-        GetClientRect(hwnd, &clientRect)
+        _ = win32GetClientRect(UnsafeRawPointer(hwnd), &clientRect)
         let clientWidth = Int32(max(0, clientRect.right - clientRect.left))
         let clientHeight = Int32(max(0, clientRect.bottom - clientRect.top))
         let renderWidth = max(1, clientWidth - Win32ControlPanel.panelWidth)
@@ -239,7 +239,7 @@ final class Win32DemoApp {
         guard let hwnd else { return }
 
         var clientRect = RECT()
-        guard GetClientRect(hwnd, &clientRect) else { return }
+        guard win32GetClientRect(UnsafeRawPointer(hwnd), &clientRect) != 0 else { return }
         let clientWidth = Int32(max(0, clientRect.right - clientRect.left))
         let clientHeight = Int32(max(0, clientRect.bottom - clientRect.top))
         let panelWidth = Win32ControlPanel.panelWidth
@@ -288,18 +288,18 @@ final class Win32DemoApp {
         lastFrameTime = ProcessInfo.processInfo.systemUptime
 
         while isRunning {
-            while PeekMessageW(&msg, nil, 0, 0, UINT(PM_REMOVE)) {
+            while win32PeekMessageW(&msg, nil, 0, 0, PM_REMOVE) != 0 {
                 if msg.message == UINT(WM_QUIT) {
                     isRunning = false
                     break
                 }
-                TranslateMessage(&msg)
-                DispatchMessageW(&msg)
+                _ = TranslateMessage(&msg)
+                _ = DispatchMessageW(&msg)
             }
 
             if !isRunning { break }
 
-            _ = MsgWaitForMultipleObjectsEx(0, nil, 1000 / 60, QS_ALLINPUT, MWMO_INPUTAVAILABLE, nil)
+            _ = win32MsgWaitForMultipleObjectsEx(0, nil, 1000 / 60, QS_ALLINPUT, MWMO_INPUTAVAILABLE)
 
             let now = ProcessInfo.processInfo.systemUptime
             let dt = Float(min(0.25, max(0, now - lastFrameTime)))

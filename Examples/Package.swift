@@ -15,6 +15,61 @@ import PackageDescription
 let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 let libraryRoot = packageRoot.deletingLastPathComponent()
 
+func nativePath(_ url: URL) -> String {
+    url.withUnsafeFileSystemRepresentation { ptr in
+        ptr.map { String(cString: $0) }
+    } ?? url.path
+}
+
+func runEnsureFilament(scriptPath: String, expectedHeaderPath: String) {
+    #if os(Windows)
+    let env = ProcessInfo.processInfo.environment
+    let pathDirs = (env["PATH"] ?? env["Path"] ?? "")
+        .split(separator: ";")
+        .map(String.init)
+    let realDirs = pathDirs.filter { !$0.lowercased().contains("windowsapps") }
+    let stubDirs = pathDirs.filter { $0.lowercased().contains("windowsapps") }
+
+    var candidates: [(String, [String])] = []
+    for dir in (realDirs + ["C:\\Windows"] + stubDirs) {
+        let base = URL(fileURLWithPath: dir)
+        let pythonExe = nativePath(base.appendingPathComponent("python.exe"))
+        if FileManager.default.fileExists(atPath: pythonExe) {
+            candidates.append((pythonExe, [scriptPath]))
+        }
+        let pyExe = nativePath(base.appendingPathComponent("py.exe"))
+        if FileManager.default.fileExists(atPath: pyExe) {
+            candidates.append((pyExe, ["-3", scriptPath]))
+        }
+        let python3Exe = nativePath(base.appendingPathComponent("python3.exe"))
+        if FileManager.default.fileExists(atPath: python3Exe) {
+            candidates.append((python3Exe, [scriptPath]))
+        }
+    }
+    let comSpec = env["ComSpec"] ?? "C:\\Windows\\System32\\cmd.exe"
+    candidates.append((comSpec, ["/d", "/s", "/c", "python \"\(scriptPath)\""]))
+    candidates.append((comSpec, ["/d", "/s", "/c", "py -3 \"\(scriptPath)\""]))
+
+    for (exe, args) in candidates {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: exe)
+        proc.arguments = args
+        if (try? proc.run()) != nil {
+            proc.waitUntilExit()
+            if proc.terminationStatus == 0 && FileManager.default.fileExists(atPath: expectedHeaderPath) {
+                return
+            }
+        }
+    }
+    #else
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    proc.arguments = ["python3", scriptPath]
+    try? proc.run()
+    proc.waitUntilExit()
+    #endif
+}
+
 // Mirror of the library's Swift settings: Swift 6, C++ interop against the same
 // prebuilt Filament SDK. The library resolves that SDK itself; the demos need the same
 // include path, honouring FILAMENT_DIR the same way.
@@ -23,18 +78,17 @@ let filamentDir: String = {
         return env
     }
     let local = libraryRoot.appendingPathComponent(".filament")
-    if FileManager.default.fileExists(atPath: local.appendingPathComponent("include/filament/Engine.h").path) {
-        return local.path
+    let headerPath = nativePath(local.appendingPathComponent("include/filament/Engine.h"))
+    if FileManager.default.fileExists(atPath: headerPath) {
+        return nativePath(local)
     }
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    proc.arguments = ["python3", libraryRoot.appendingPathComponent("scripts/ensure_filament.py").path]
-    try? proc.run()
-    proc.waitUntilExit()
-    return local.path
+    let scriptPath = nativePath(libraryRoot.appendingPathComponent("scripts/ensure_filament.py"))
+    runEnsureFilament(scriptPath: scriptPath, expectedHeaderPath: headerPath)
+    return nativePath(local)
 }()
 
-let includeDir = URL(fileURLWithPath: filamentDir).appendingPathComponent("include").path
+let includeDir = nativePath(URL(fileURLWithPath: filamentDir).appendingPathComponent("include"))
+let bridgeIncludeDir = nativePath(libraryRoot.appendingPathComponent("Sources/FilamentC/include"))
 
 // NOTE: for a path dependency SwiftPM identifies the package by its *directory* name,
 // not the `name:` in its manifest - so this is "filament-swift", not "FilamentSwift".
@@ -45,7 +99,7 @@ let demoSwiftSettings: [SwiftSetting] = [
     .interoperabilityMode(.Cxx),
     .unsafeFlags([
         "-I", includeDir,
-        "-I", libraryRoot.appendingPathComponent("Sources/FilamentC/include").path,
+        "-I", bridgeIncludeDir,
     ]),
 ]
 
@@ -57,6 +111,17 @@ let macOSLinkerSettings: [LinkerSetting] = [
     .linkedFramework("CoreGraphics"),
     .linkedFramework("QuartzCore"),
     .linkedFramework("Cocoa"),
+]
+
+let windowsLinkerSettings: [LinkerSetting] = [
+    .linkedLibrary("user32"),
+    .linkedLibrary("gdi32"),
+    .linkedLibrary("opengl32"),
+    .linkedLibrary("shlwapi"),
+    .linkedLibrary("ole32"),
+    .linkedLibrary("shell32"),
+    .linkedLibrary("comdlg32"),
+    .linkedLibrary("dwmapi"),
 ]
 
 var products: [Product] = []
@@ -84,7 +149,7 @@ targets.append(.executableTarget(
                    .product(name: "FilamentWin32", package: "filament-swift")],
     path: "Sources/Win32Demo",
     swiftSettings: demoSwiftSettings,
-    linkerSettings: [.unsafeFlags(["user32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "comdlg32.lib"])]
+    linkerSettings: windowsLinkerSettings
 ))
 
 // The WinUI 3 demo additionally needs the generated WinRT projections. They live in
@@ -92,7 +157,7 @@ targets.append(.executableTarget(
 // so they cannot be targets of this one. The dependency is only added once they have
 // been generated on a Windows machine.
 if FileManager.default.fileExists(
-    atPath: packageRoot.appendingPathComponent("../WinUIProjections/Sources/WinUI").path
+    atPath: nativePath(packageRoot.appendingPathComponent("../WinUIProjections/Sources/WinUI"))
 ) {
     dependencies.append(.package(path: "../WinUIProjections"))
     products.append(.executable(name: "WinUI3Demo", targets: ["WinUI3Demo"]))
@@ -109,8 +174,7 @@ if FileManager.default.fileExists(
         ],
         path: "Sources/WinUI3Demo",
         swiftSettings: demoSwiftSettings,
-        linkerSettings: [.unsafeFlags(["user32.lib", "gdi32.lib", "ole32.lib", "shell32.lib",
-                                       "comdlg32.lib", "dwmapi.lib"])]
+        linkerSettings: windowsLinkerSettings
     ))
 }
 #elseif os(Linux)

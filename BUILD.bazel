@@ -12,7 +12,15 @@ cc_library(
     srcs = ["Sources/FilamentC/stub.cpp"],
     hdrs = glob(["Sources/FilamentC/include/**/*.h"]),
     includes = ["Sources/FilamentC/include"],
-    copts = ["-std=c++17"],
+    copts = select({
+        "@platforms//os:windows": [
+            "/std:c++17",
+            "/EHsc",
+        ],
+        "//conditions:default": [
+            "-std=c++17",
+        ],
+    }),
     deps = ["@filament//:all"],
     visibility = ["//visibility:public"],
 )
@@ -58,6 +66,8 @@ cc_library(
         "@platforms//os:windows": [
             "user32.lib",
             "gdi32.lib",
+            "opengl32.lib",
+            "shlwapi.lib",
             "ole32.lib",
             "shell32.lib",
             "dwmapi.lib",

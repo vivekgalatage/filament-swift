@@ -3,18 +3,25 @@ load(":defs.bzl", "declare_projections")
 
 # Generated WinRT projections.
 #
-# Produced on a Windows machine by
+#Produced on a Windows machine by
 #   python WinUIProjections/scripts/generate_winui_projection.py
 #
-# `declare_projections` skips any module that has not been generated yet, so
-# `bazel build //...` works on a fresh checkout on every platform. Before codegen, only
-# `WinRTVersion` exists here and `bazel query //WinUIProjections:*` will not list the
-# projection modules.
+# `declare_projections` marks any module whose generated sources are not yet present on disk
+# as `target_compatible_with = [":projections_not_generated"]`, so `bazel build //...` works
+# on a fresh checkout on every platform (including Windows) without missing-target errors.
 
 exports_files([
     "projections.json",
     "README.md",
 ])
+
+constraint_setting(name = "projections_state")
+
+constraint_value(
+    name = "projections_not_generated",
+    constraint_setting = ":projections_state",
+    visibility = ["//visibility:public"],
+)
 
 # Always present: keeps the package valid so the manifest and this BUILD file resolve
 # before the codegen has run.

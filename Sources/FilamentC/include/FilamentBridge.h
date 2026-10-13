@@ -1,5 +1,15 @@
 #pragma once
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#undef min
+#undef max
+#undef near
+#undef far
+#endif
+
 #include <filament/Engine.h>
 #include <filament/Renderer.h>
 #include <filament/Scene.h>

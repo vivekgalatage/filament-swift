@@ -34,7 +34,14 @@ let MK_LBUTTON: UInt64 = 0x0001
 let MK_RBUTTON: UInt64 = 0x0002
 let MK_SHIFT: UInt64 = 0x0004
 let MK_MBUTTON: UInt64 = 0x0010
+let CS_VREDRAW: UInt32 = 0x0001
+let CS_HREDRAW: UInt32 = 0x0002
 let CS_DBLCLKS: UInt32 = 0x0008
+let CW_USEDEFAULT: Int32 = Int32(bitPattern: 0x8000_0000)
+let PM_REMOVE: UInt32 = 0x0001
+let QS_ALLINPUT: UInt32 = 0x04FF
+let MWMO_INPUTAVAILABLE: UInt32 = 0x0004
+let COINIT_APARTMENTTHREADED_VALUE: UInt32 = 0x0002
 
 // --- Trackbar (msctls_trackbar32) messages ---------------------------------
 let TBM_GETPOS: UInt32 = 0x0400
@@ -90,6 +97,30 @@ func win32SetWindowLongW(_ hWnd: UnsafeRawPointer?, _ nIndex: Int32, _ dwNewLong
 
 @_silgen_name("MoveWindow")
 func win32MoveWindow(_ hWnd: UnsafeRawPointer?, _ x: Int32, _ y: Int32, _ nWidth: Int32, _ nHeight: Int32, _ bRepaint: Int32) -> Int32
+
+@_silgen_name("GetClientRect")
+func win32GetClientRect(_ hWnd: UnsafeRawPointer?, _ lpRect: UnsafeMutablePointer<RECT>) -> Int32
+
+@_silgen_name("PeekMessageW")
+func win32PeekMessageW(
+    _ lpMsg: UnsafeMutablePointer<MSG>,
+    _ hWnd: UnsafeRawPointer?,
+    _ wMsgFilterMin: UInt32,
+    _ wMsgFilterMax: UInt32,
+    _ wRemoveMsg: UInt32
+) -> Int32
+
+@_silgen_name("MsgWaitForMultipleObjectsEx")
+func win32MsgWaitForMultipleObjectsEx(
+    _ nCount: UInt32,
+    _ pHandles: UnsafeRawPointer?,
+    _ dwMilliseconds: UInt32,
+    _ dwWakeMask: UInt32,
+    _ dwFlags: UInt32
+) -> UInt32
+
+@_silgen_name("CoInitializeEx")
+func win32CoInitializeEx(_ pvReserved: UnsafeMutableRawPointer?, _ dwCoInit: UInt32) -> Int32
 
 @_silgen_name("SetCapture")
 func win32SetCapture(_ hWnd: UnsafeRawPointer?) -> UnsafeRawPointer?

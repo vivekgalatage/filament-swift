@@ -1,6 +1,16 @@
 #ifndef FILAMENT_C_H
 #define FILAMENT_C_H
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#undef min
+#undef max
+#undef near
+#undef far
+#endif
+
 // Core Filament Engine Headers
 #include <filament/Engine.h>
 #include <filament/Renderer.h>

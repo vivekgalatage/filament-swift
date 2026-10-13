@@ -16,25 +16,65 @@ import PackageDescription
 
 let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 
-// Resolve or ensure .filament cache is populated
-let filamentDir: String = {
-    if let env = ProcessInfo.processInfo.environment["FILAMENT_DIR"], !env.isEmpty {
-        return env
+func nativePath(_ url: URL) -> String {
+    url.withUnsafeFileSystemRepresentation { ptr in
+        ptr.map { String(cString: $0) }
+    } ?? url.path
+}
+
+func runEnsureFilament(scriptPath: String, expectedHeaderPath: String) {
+    #if os(Windows)
+    let env = ProcessInfo.processInfo.environment
+    let pathDirs = (env["PATH"] ?? env["Path"] ?? "")
+        .split(separator: ";")
+        .map(String.init)
+    let realDirs = pathDirs.filter { !$0.lowercased().contains("windowsapps") }
+    let stubDirs = pathDirs.filter { $0.lowercased().contains("windowsapps") }
+
+    var candidates: [(String, [String])] = []
+    for dir in (realDirs + ["C:\\Windows"] + stubDirs) {
+        let base = URL(fileURLWithPath: dir)
+        let pythonExe = nativePath(base.appendingPathComponent("python.exe"))
+        if FileManager.default.fileExists(atPath: pythonExe) {
+            candidates.append((pythonExe, [scriptPath]))
+        }
+        let pyExe = nativePath(base.appendingPathComponent("py.exe"))
+        if FileManager.default.fileExists(atPath: pyExe) {
+            candidates.append((pyExe, ["-3", scriptPath]))
+        }
+        let python3Exe = nativePath(base.appendingPathComponent("python3.exe"))
+        if FileManager.default.fileExists(atPath: python3Exe) {
+            candidates.append((python3Exe, [scriptPath]))
+        }
     }
-    let local = packageRoot.appendingPathComponent(".filament")
-    if FileManager.default.fileExists(atPath: local.appendingPathComponent("include/filament/Engine.h").path) {
-        return local.path
+    let comSpec = env["ComSpec"] ?? "C:\\Windows\\System32\\cmd.exe"
+    candidates.append((comSpec, ["/d", "/s", "/c", "python \"\(scriptPath)\""]))
+    candidates.append((comSpec, ["/d", "/s", "/c", "py -3 \"\(scriptPath)\""]))
+
+    for (exe, args) in candidates {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: exe)
+        proc.arguments = args
+        if (try? proc.run()) != nil {
+            proc.waitUntilExit()
+            if proc.terminationStatus == 0 && FileManager.default.fileExists(atPath: expectedHeaderPath) {
+                return
+            }
+        }
     }
-    // Fetch if not present
+    let message = "[FilamentSwift] warning: could not run scripts/ensure_filament.py; "
+        + "ensure Python 3 is installed on PATH or set FILAMENT_DIR.\n"
+    FileHandle.standardError.write(Data(message.utf8))
+    #else
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    proc.arguments = ["python3", packageRoot.appendingPathComponent("scripts/ensure_filament.py").path]
+    proc.arguments = ["python3", scriptPath]
     do {
         try proc.run()
         proc.waitUntilExit()
         if proc.terminationStatus != 0 {
             let message = "[FilamentSwift] warning: ensure_filament.py exited with status "
-                + "\(proc.terminationStatus); assuming \(local.path) is usable.\n"
+                + "\(proc.terminationStatus); assuming \(expectedHeaderPath) is usable.\n"
             FileHandle.standardError.write(Data(message.utf8))
         }
     } catch {
@@ -42,70 +82,95 @@ let filamentDir: String = {
             + "set FILAMENT_DIR to point at a prebuilt Filament SDK.\n"
         FileHandle.standardError.write(Data(message.utf8))
     }
-    return local.path
+    #endif
+}
+
+// Resolve or ensure .filament cache is populated
+let filamentDir: String = {
+    if let env = ProcessInfo.processInfo.environment["FILAMENT_DIR"], !env.isEmpty {
+        return env
+    }
+    let local = packageRoot.appendingPathComponent(".filament")
+    let headerPath = nativePath(local.appendingPathComponent("include/filament/Engine.h"))
+    if FileManager.default.fileExists(atPath: headerPath) {
+        return nativePath(local)
+    }
+    let scriptPath = nativePath(packageRoot.appendingPathComponent("scripts/ensure_filament.py"))
+    runEnsureFilament(scriptPath: scriptPath, expectedHeaderPath: headerPath)
+    return nativePath(local)
 }()
 
-let includeDir = URL(fileURLWithPath: filamentDir).appendingPathComponent("include").path
+let includeDir = nativePath(URL(fileURLWithPath: filamentDir).appendingPathComponent("include"))
+let bridgeIncludeDir = nativePath(packageRoot.appendingPathComponent("Sources/FilamentC/include"))
 
 /// Root of the prebuilt Filament libraries.
 ///
-/// These archives do NOT agree across platforms:
-///   * macOS   - `lib/<name>.a` under `lib/arm64` or `lib/x86_64`
-///   * Linux   - `lib/<name>.a` under `lib/x86_64`
-///   * Windows - `lib/<name>.lib` (MSVC import libraries, **no `.a` anywhere**) under
-///               `lib/x86_64/<mt|mtd>`. `md`/`mdd` are the DLL flavours and cannot be
-///               statically linked.
-/// `gltfio_core` exists only in the macOS/Linux archives.
+///   * macOS   - `lib/lib<name>.a` under `lib/arm64` or `lib/x86_64`
+///   * Linux   - `lib/lib<name>.a` under `lib/x86_64`
+///   * Windows - `<name>.lib` (static libraries compiled with `/MD` dynamic CRT to match
+///               Swift on Windows) under `lib/x86_64/md`
 let libDir: String = {
     let root = URL(fileURLWithPath: filamentDir)
     #if os(macOS)
     #if arch(arm64)
-    return root.appendingPathComponent("lib/arm64").path
+    return nativePath(root.appendingPathComponent("lib/arm64"))
     #else
-    return root.appendingPathComponent("lib/x86_64").path
+    return nativePath(root.appendingPathComponent("lib/x86_64"))
     #endif
     #elseif os(Windows)
-    // mt = multi-threaded static (mtd = static debug).
-    return root.appendingPathComponent("lib/x86_64/mt").path
+    let mdDir = root.appendingPathComponent("lib/x86_64/md")
+    if FileManager.default.fileExists(atPath: nativePath(mdDir)) {
+        return nativePath(mdDir)
+    }
+    return nativePath(root.appendingPathComponent("lib/x86_64"))
     #else
-    return root.appendingPathComponent("lib/x86_64").path
+    return nativePath(root.appendingPathComponent("lib/x86_64"))
     #endif
 }()
 
-#if os(Windows)
-let libExt = "lib"
-let filamentLibraryNames = [
-    "filament", "backend", "bluevk", "bluegl", "filabridge", "filaflat",
-    "utils", "geometry", "smol-v", "ibl", "gltfio", "dracodec",
-    "basis_transcoder", "meshoptimizer", "uberarchive", "uberzlib",
-    "zstd", "stb", "ktxreader",
-]
-#else
-let libExt = "a"
 let filamentLibraryNames = [
     "filament", "backend", "bluevk", "bluegl", "filabridge", "filaflat",
     "utils", "geometry", "smol-v", "ibl", "gltfio", "gltfio_core", "dracodec",
     "basis_transcoder", "meshoptimizer", "uberarchive", "uberzlib",
     "zstd", "stb", "ktxreader",
 ]
-#endif
 
-let filamentStaticLibs: [String] = filamentLibraryNames.map { "\(libDir)/lib\($0).\(libExt)" }
-
-// Core Filament targets only need the C++ runtime and the static libraries. Platform
-// frameworks/UI libraries belong to the platform host-view targets: putting them here
-// breaks linking on the other platforms.
+#if os(Windows)
+let filamentStaticLibs: [String] = filamentLibraryNames.map {
+    nativePath(URL(fileURLWithPath: libDir).appendingPathComponent("\($0).lib"))
+}
+let filamentLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(filamentStaticLibs),
+    .linkedLibrary("gdi32"),
+    .linkedLibrary("user32"),
+    .linkedLibrary("opengl32"),
+    .linkedLibrary("shlwapi"),
+    .linkedLibrary("dwmapi"),
+    .linkedLibrary("ole32"),
+    .linkedLibrary("shell32"),
+]
+#elseif os(Linux)
+let filamentStaticLibs: [String] = filamentLibraryNames.map { "\(libDir)/lib\($0).a" }
+let filamentLinkerSettings: [LinkerSetting] = [
+    .linkedLibrary("stdc++"),
+    .linkedLibrary("pthread"),
+    .linkedLibrary("dl"),
+    .unsafeFlags(filamentStaticLibs),
+]
+#else
+let filamentStaticLibs: [String] = filamentLibraryNames.map { "\(libDir)/lib\($0).a" }
 let filamentLinkerSettings: [LinkerSetting] = [
     .linkedLibrary("c++"),
     .unsafeFlags(filamentStaticLibs),
 ]
+#endif
 
 let filamentSwiftSettings: [SwiftSetting] = [
     .swiftLanguageMode(.v6),
     .interoperabilityMode(.Cxx),
     .unsafeFlags([
         "-I", includeDir,
-        "-I", URL(fileURLWithPath: packageRoot.path).appendingPathComponent("Sources/FilamentC/include").path,
+        "-I", bridgeIncludeDir,
     ]),
 ]
 

@@ -45,12 +45,12 @@ RELEASES = {
     ("Windows", "AMD64"): {
         "url": f"https://github.com/google/filament/releases/download/v{FILAMENT_VERSION}/filament-v{FILAMENT_VERSION}-windows.tgz",
         "sha256": "e8705d817b7a884fa2d185080ceb80dd42c4ba339930d49dedc79b5761215285",
-        "lib_subdir": "lib/x86_64",
+        "lib_subdir": "lib/x86_64/md",
     },
     ("Windows", "x86_64"): {
         "url": f"https://github.com/google/filament/releases/download/v{FILAMENT_VERSION}/filament-v{FILAMENT_VERSION}-windows.tgz",
         "sha256": "e8705d817b7a884fa2d185080ceb80dd42c4ba339930d49dedc79b5761215285",
-        "lib_subdir": "lib/x86_64",
+        "lib_subdir": "lib/x86_64/md",
     },
 }
 
@@ -145,7 +145,7 @@ def ensure_filament(output_dir: str = None) -> str:
 
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
-        os.rename(tmp_target, target_dir)
+        os.replace(tmp_target, target_dir)
 
     log(f"successfully installed Filament v{FILAMENT_VERSION} into {target_dir}")
     return target_dir

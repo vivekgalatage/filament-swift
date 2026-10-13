@@ -18,6 +18,9 @@ import FilamentWin32
 @preconcurrency @_spi(WinRTInternal) import WinUI
 
 // Win32 mouse message constants
+private let WM_DESTROY: UInt32 = 0x0002
+private let WM_SIZE: UInt32 = 0x0005
+private let WM_QUIT: UInt32 = 0x0012
 private let WM_MOUSEMOVE: UInt32 = 0x0200
 private let WM_LBUTTONDOWN: UInt32 = 0x0201
 private let WM_LBUTTONUP: UInt32 = 0x0202
@@ -32,7 +35,47 @@ private let MK_LBUTTON: UInt64 = 0x0001
 private let MK_RBUTTON: UInt64 = 0x0002
 private let MK_SHIFT: UInt64 = 0x0004
 private let MK_MBUTTON: UInt64 = 0x0010
+private let CS_VREDRAW: UInt32 = 0x0001
+private let CS_HREDRAW: UInt32 = 0x0002
 private let CS_DBLCLKS: UInt32 = 0x0008
+private let CW_USEDEFAULT: Int32 = Int32(bitPattern: 0x8000_0000)
+private let PM_REMOVE: UInt32 = 0x0001
+private let QS_ALLINPUT: UInt32 = 0x04FF
+private let MWMO_INPUTAVAILABLE: UInt32 = 0x0004
+private let kTrue: Int32 = 1
+
+@_silgen_name("MoveWindow")
+private func win32MoveWindow(_ hWnd: UnsafeRawPointer?, _ x: Int32, _ y: Int32, _ nWidth: Int32, _ nHeight: Int32, _ bRepaint: Int32) -> Int32
+
+@_silgen_name("GetClientRect")
+private func win32GetClientRect(_ hWnd: UnsafeRawPointer?, _ lpRect: UnsafeMutablePointer<RECT>) -> Int32
+
+@_silgen_name("PeekMessageW")
+private func win32PeekMessageW(
+    _ lpMsg: UnsafeMutablePointer<MSG>,
+    _ hWnd: UnsafeRawPointer?,
+    _ wMsgFilterMin: UInt32,
+    _ wMsgFilterMax: UInt32,
+    _ wRemoveMsg: UInt32
+) -> Int32
+
+@_silgen_name("MsgWaitForMultipleObjectsEx")
+private func win32MsgWaitForMultipleObjectsEx(
+    _ nCount: UInt32,
+    _ pHandles: UnsafeRawPointer?,
+    _ dwMilliseconds: UInt32,
+    _ dwWakeMask: UInt32,
+    _ dwFlags: UInt32
+) -> UInt32
+
+@_silgen_name("SetCapture")
+private func win32SetCapture(_ hWnd: UnsafeRawPointer?) -> UnsafeRawPointer?
+
+@_silgen_name("ReleaseCapture")
+private func win32ReleaseCapture() -> Int32
+
+@_silgen_name("SetFocus")
+private func win32SetFocus(_ hWnd: UnsafeRawPointer?) -> UnsafeRawPointer?
 
 /// Main-actor-isolated host managing the Win32 windows, XAML island, and Filament scene.
 @MainActor
@@ -123,8 +166,8 @@ final class DemoHost {
                     fatalError("[WinUI3Demo] Failed to create the top-level window")
                 }
                 topHwnd = hwnd
-                ShowWindow(hwnd, SW_SHOW)
-                UpdateWindow(hwnd)
+                _ = ShowWindow(hwnd, SW_SHOW)
+                _ = UpdateWindow(hwnd)
             }
         }
 
@@ -142,7 +185,7 @@ final class DemoHost {
         if let renderChild {
             let view = FilamentWin32View()
             var rect = RECT()
-            GetClientRect(renderChild, &rect)
+            _ = win32GetClientRect(UnsafeRawPointer(renderChild), &rect)
             view.attach(hwnd: renderChild,
                         width: UInt32(max(1, rect.right - rect.left)),
                         height: UInt32(max(1, rect.bottom - rect.top)))
@@ -170,16 +213,16 @@ final class DemoHost {
 
     private func layoutChildren() {
         var client = RECT()
-        GetClientRect(topHwnd, &client)
+        _ = win32GetClientRect(UnsafeRawPointer(topHwnd), &client)
         let width = client.right - client.left
         let height = client.bottom - client.top
         let renderWidth = max(1, width - panelWidth)
 
         if let renderChild {
-            MoveWindow(renderChild, 0, 0, renderWidth, height, true)
+            _ = win32MoveWindow(UnsafeRawPointer(renderChild), 0, 0, renderWidth, height, kTrue)
         }
         if let panelChild {
-            MoveWindow(panelChild, renderWidth, 0, panelWidth, height, true)
+            _ = win32MoveWindow(UnsafeRawPointer(panelChild), renderWidth, 0, panelWidth, height, kTrue)
         }
     }
 
@@ -200,7 +243,7 @@ final class DemoHost {
 
     // MARK: - Message Loop & Mouse Input
 
-    private func handleMessage(_ hwnd: HWND, _ msg: UInt32, _ wParam: WPARAM, _ lParam: LPARAM) -> LRESULT {
+    private func handleMessage(_ hwnd: HWND?, _ msg: UInt32, _ wParam: WPARAM, _ lParam: LPARAM) -> LRESULT {
         switch msg {
         case WM_DESTROY:
             PostQuitMessage(0)
@@ -211,8 +254,8 @@ final class DemoHost {
             return 0
         case WM_LBUTTONDOWN, WM_RBUTTONDOWN, WM_MBUTTONDOWN:
             if hwnd == renderChild {
-                _ = SetFocus(hwnd)
-                _ = SetCapture(hwnd)
+                _ = win32SetFocus(UnsafeRawPointer(hwnd))
+                _ = win32SetCapture(UnsafeRawPointer(hwnd))
                 lastMouseX = Int(Int16(truncatingIfNeeded: Int64(lParam) & 0xFFFF))
                 lastMouseY = Int(Int16(truncatingIfNeeded: (Int64(lParam) >> 16) & 0xFFFF))
                 return 0
@@ -222,7 +265,7 @@ final class DemoHost {
             if hwnd == renderChild {
                 let mask = MK_LBUTTON | MK_RBUTTON | MK_MBUTTON
                 if (UInt64(wParam) & mask) == 0 {
-                    ReleaseCapture()
+                    _ = win32ReleaseCapture()
                 }
                 return 0
             }
@@ -270,14 +313,14 @@ final class DemoHost {
     private func messageLoop() -> Int32 {
         var msg = MSG()
         while true {
-            while PeekMessageW(&msg, nil, 0, 0, UINT(PM_REMOVE)) {
+            while win32PeekMessageW(&msg, nil, 0, 0, PM_REMOVE) != 0 {
                 if msg.message == UINT(WM_QUIT) {
                     return Int32(msg.wParam)
                 }
-                TranslateMessage(&msg)
-                DispatchMessageW(&msg)
+                _ = TranslateMessage(&msg)
+                _ = DispatchMessageW(&msg)
             }
-            _ = MsgWaitForMultipleObjects(0, nil, false, 8, QS_ALLINPUT)
+            _ = win32MsgWaitForMultipleObjectsEx(0, nil, 8, QS_ALLINPUT, MWMO_INPUTAVAILABLE)
         }
     }
 
