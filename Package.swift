@@ -55,6 +55,7 @@ func runEnsureFilament(scriptPath: String, expectedHeaderPath: String) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: exe)
         proc.arguments = args
+        proc.standardOutput = FileHandle.nullDevice
         if (try? proc.run()) != nil {
             proc.waitUntilExit()
             if proc.terminationStatus == 0 && FileManager.default.fileExists(atPath: expectedHeaderPath) {
@@ -69,6 +70,7 @@ func runEnsureFilament(scriptPath: String, expectedHeaderPath: String) {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     proc.arguments = ["python3", scriptPath]
+    proc.standardOutput = FileHandle.nullDevice
     do {
         try proc.run()
         proc.waitUntilExit()
