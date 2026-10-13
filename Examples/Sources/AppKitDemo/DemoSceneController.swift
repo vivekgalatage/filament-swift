@@ -53,9 +53,11 @@ final class DemoSceneController {
 
     private(set) var currentShadingMode: ShadingMode = .standardPBR
     private(set) var currentCanvasBackground: CanvasBackground = .darkStudio
+    private(set) var currentOutlineColor: (r: Float, g: Float, b: Float) = (0.10, 0.08, 0.06)
     private(set) var toonMaterial: FilamentToonMaterial?
     private(set) var outlineMaterial: FilamentToonOutlineMaterial?
     private(set) var depthMaskMaterial: FilamentDepthMaskMaterial?
+    public private(set) var overlayWindow: FilamentOverlayWindow?
 
     private var animationTime: Float = 0.0
     private var renderTimer: Timer?
@@ -63,6 +65,8 @@ final class DemoSceneController {
 
     /// Invoked whenever the loaded model changes.
     var onModelStateChanged: (() -> Void)?
+    /// Invoked whenever the floating overlay window is opened or closed.
+    var onOverlayStateChanged: ((Bool) -> Void)?
     /// Invoked after each rendered frame with the instantaneous FPS and auto-orbit state.
     var onFrameRendered: ((Double, Bool) -> Void)?
 
@@ -134,6 +138,11 @@ final class DemoSceneController {
 
         applyCurrentShadingMode()
 
+        if let overlay = overlayWindow, let url = currentModelURL {
+            try? overlay.loadModel(from: url)
+            overlay.setShadingMode(index: currentShadingMode.rawValue)
+        }
+
         onModelStateChanged?()
     }
 
@@ -142,6 +151,7 @@ final class DemoSceneController {
     func setShadingMode(_ mode: ShadingMode) {
         currentShadingMode = mode
         applyCurrentShadingMode()
+        overlayWindow?.setShadingMode(index: mode.rawValue)
     }
 
     private func applyCurrentShadingMode() {
@@ -235,7 +245,11 @@ final class DemoSceneController {
     private func ensureToonMaterials() {
         guard toonMaterial == nil || outlineMaterial == nil || depthMaskMaterial == nil else { return }
         let engine = filamentView.engine
+        let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let repoRoot = sourceDir.deletingLastPathComponent().deletingLastPathComponent()
         let candidateDirs = [
+            repoRoot.appendingPathComponent("Resources/Materials", isDirectory: true),
+            repoRoot.appendingPathComponent("Examples/Resources/Materials", isDirectory: true),
             URL(fileURLWithPath: "Examples/Resources/Materials", isDirectory: true),
             URL(fileURLWithPath: "Resources/Materials", isDirectory: true),
             URL(fileURLWithPath: "../Resources/Materials", isDirectory: true),
@@ -256,7 +270,9 @@ final class DemoSceneController {
             }
             if FileManager.default.fileExists(atPath: outURL.path) && outlineMaterial == nil {
                 do {
-                    outlineMaterial = try engine.createOutlineMaterial(from: outURL)
+                    let out = try engine.createOutlineMaterial(from: outURL)
+                    out.outlineColor = (currentOutlineColor.r, currentOutlineColor.g, currentOutlineColor.b, 1.0)
+                    outlineMaterial = out
                     print("[AppKitDemo] Loaded ToonOutline material from \(outURL.path)")
                 } catch {
                     print("[AppKitDemo] Error loading ToonOutline: \(error)")
@@ -305,6 +321,7 @@ final class DemoSceneController {
     func setOutlineThickness(_ value: Float) {
         ensureToonMaterials()
         outlineMaterial?.outlineThickness = value
+        overlayWindow?.setOutlineThickness(value)
     }
 
     func setToonBaseColor(r: Float, g: Float, b: Float) {
@@ -313,8 +330,10 @@ final class DemoSceneController {
     }
 
     func setOutlineColor(r: Float, g: Float, b: Float) {
+        currentOutlineColor = (r, g, b)
         ensureToonMaterials()
         outlineMaterial?.outlineColor = (r, g, b, 1.0)
+        overlayWindow?.setOutlineColor(r: r, g: g, b: b, a: 1.0)
     }
 
     // MARK: - Morph Target controls
@@ -378,6 +397,34 @@ final class DemoSceneController {
         return newTransparency
     }
 
+    @discardableResult
+    func toggleOverlayWindow() -> Bool {
+        if let existing = overlayWindow {
+            existing.close()
+            overlayWindow = nil
+            onOverlayStateChanged?(false)
+            return false
+        }
+
+        let overlay = FilamentOverlayWindow(width: 440, height: 560)
+        overlay.onClose = { [weak self] in
+            self?.overlayWindow = nil
+            self?.onOverlayStateChanged?(false)
+        }
+        if let url = currentModelURL {
+            try? overlay.loadModel(from: url)
+        }
+        overlay.setShadingMode(index: currentShadingMode.rawValue)
+        overlay.setOutlineColor(r: currentOutlineColor.r, g: currentOutlineColor.g, b: currentOutlineColor.b, a: 1.0)
+        if let outline = outlineMaterial {
+            overlay.setOutlineThickness(outline.outlineThickness)
+        }
+        overlay.show()
+        overlayWindow = overlay
+        onOverlayStateChanged?(true)
+        return true
+    }
+
     func updateViewport() {
         filamentView.updateViewport()
     }
@@ -400,6 +447,8 @@ final class DemoSceneController {
     func shutdown() {
         renderTimer?.invalidate()
         renderTimer = nil
+        overlayWindow?.close()
+        overlayWindow = nil
         model.unload()
         outlineModel.unload()
         filamentView.stopRendering()

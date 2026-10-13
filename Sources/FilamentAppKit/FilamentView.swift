@@ -72,6 +72,10 @@ public final class FilamentView: NSView {
     public override var acceptsFirstResponder: Bool { true }
 
     public override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command) {
+            window?.performDrag(with: event)
+            return
+        }
         window?.makeFirstResponder(self)
         if event.clickCount == 2 {
             orbitCamera?.reset()

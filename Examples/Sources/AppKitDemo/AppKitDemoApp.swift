@@ -71,6 +71,12 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             action: #selector(toggleOrbitMenuClicked),
             keyEquivalent: " "
         ))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(NSMenuItem(
+            title: "Toggle Floating Companion Window",
+            action: #selector(toggleOverlayMenuClicked),
+            keyEquivalent: "l"
+        ))
         let viewItem = NSMenuItem()
         viewItem.submenu = viewMenu
         mainMenu.addItem(viewItem)
@@ -101,6 +107,21 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             action: #selector(outlineOnlyShadingMenuClicked),
             keyEquivalent: "5"
         ))
+
+        shadingMenu.addItem(NSMenuItem.separator())
+        let outlineColorMenu = NSMenu(title: "Outline Color")
+        outlineColorMenu.addItem(NSMenuItem(title: "Charcoal Ink (Classic)", action: #selector(outlineColorCharcoalClicked), keyEquivalent: ""))
+        outlineColorMenu.addItem(NSMenuItem(title: "Pure Black", action: #selector(outlineColorBlackClicked), keyEquivalent: ""))
+        outlineColorMenu.addItem(NSMenuItem(title: "Drafting Sepia", action: #selector(outlineColorSepiaClicked), keyEquivalent: ""))
+        outlineColorMenu.addItem(NSMenuItem(title: "Navy Blueprint", action: #selector(outlineColorNavyClicked), keyEquivalent: ""))
+        outlineColorMenu.addItem(NSMenuItem(title: "Anime Brown", action: #selector(outlineColorBrownClicked), keyEquivalent: ""))
+        outlineColorMenu.addItem(NSMenuItem(title: "Crimson Inked", action: #selector(outlineColorCrimsonClicked), keyEquivalent: ""))
+        outlineColorMenu.addItem(NSMenuItem(title: "Chalk White", action: #selector(outlineColorWhiteClicked), keyEquivalent: ""))
+        outlineColorMenu.addItem(NSMenuItem(title: "Neon Cyan", action: #selector(outlineColorCyanClicked), keyEquivalent: ""))
+        let outlineColorItem = NSMenuItem(title: "Outline Color", action: nil, keyEquivalent: "")
+        outlineColorItem.submenu = outlineColorMenu
+        shadingMenu.addItem(outlineColorItem)
+
         let shadingItem = NSMenuItem()
         shadingItem.submenu = shadingMenu
         mainMenu.addItem(shadingItem)
@@ -148,6 +169,9 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         scene.onModelStateChanged = { [weak self] in
             self?.inspector.syncModelUI()
         }
+        scene.onOverlayStateChanged = { [weak self] active in
+            self?.inspector.syncOverlayUI(active: active)
+        }
         scene.onFrameRendered = { [weak self] fps, orbiting in
             self?.inspector.updateStatusBadge(fps: fps, isOrbiting: orbiting)
         }
@@ -185,6 +209,10 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         inspector.toggleOrbitClicked()
     }
 
+    @objc private func toggleOverlayMenuClicked() {
+        inspector.toggleOverlayClicked()
+    }
+
     @objc private func pbrShadingMenuClicked() {
         scene?.setShadingMode(.standardPBR)
         inspector?.syncShadingMode()
@@ -209,6 +237,15 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         scene?.setShadingMode(.outlineOnly)
         inspector?.syncShadingMode()
     }
+
+    @objc private func outlineColorCharcoalClicked() { inspector?.setOutlineColorPreset(index: 0) }
+    @objc private func outlineColorBlackClicked() { inspector?.setOutlineColorPreset(index: 1) }
+    @objc private func outlineColorSepiaClicked() { inspector?.setOutlineColorPreset(index: 2) }
+    @objc private func outlineColorNavyClicked() { inspector?.setOutlineColorPreset(index: 3) }
+    @objc private func outlineColorBrownClicked() { inspector?.setOutlineColorPreset(index: 4) }
+    @objc private func outlineColorCrimsonClicked() { inspector?.setOutlineColorPreset(index: 5) }
+    @objc private func outlineColorWhiteClicked() { inspector?.setOutlineColorPreset(index: 6) }
+    @objc private func outlineColorCyanClicked() { inspector?.setOutlineColorPreset(index: 7) }
 }
 
 @main

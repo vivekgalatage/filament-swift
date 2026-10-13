@@ -29,6 +29,29 @@ final class InspectorView: NSObject {
     private var morphSearchField: NSSearchField?
     private var statusBadge: NSTextField!
     private var transparencyLabel: NSTextField!
+    private var outlineColorWell: NSColorWell?
+    private var outlineColorPopup: NSPopUpButton?
+    private var overlayButton: NSButton?
+    private var overlayLabel: NSTextField?
+
+    private struct OutlineColorPreset {
+        let name: String
+        let color: (r: Float, g: Float, b: Float)
+        var nsColor: NSColor {
+            NSColor(srgbRed: CGFloat(color.r), green: CGFloat(color.g), blue: CGFloat(color.b), alpha: 1.0)
+        }
+    }
+
+    private let outlineColorPresets: [OutlineColorPreset] = [
+        OutlineColorPreset(name: "Charcoal Ink (Classic)", color: (0.10, 0.08, 0.06)),
+        OutlineColorPreset(name: "Pure Black (#000000)", color: (0.00, 0.00, 0.00)),
+        OutlineColorPreset(name: "Drafting Sepia", color: (0.28, 0.18, 0.12)),
+        OutlineColorPreset(name: "Navy Blueprint", color: (0.08, 0.18, 0.42)),
+        OutlineColorPreset(name: "Anime Brown", color: (0.35, 0.20, 0.15)),
+        OutlineColorPreset(name: "Crimson Inked", color: (0.70, 0.12, 0.16)),
+        OutlineColorPreset(name: "Chalk White", color: (0.95, 0.95, 0.95)),
+        OutlineColorPreset(name: "Neon Cyan", color: (0.00, 0.85, 0.95)),
+    ]
 
     private var sliderBindings: [SliderBinding] = []
     private var toggleBindings: [ToggleBinding] = []
@@ -255,12 +278,60 @@ final class InspectorView: NSObject {
             self?.scene.setOutlineThickness(Float(val))
         }
 
+        addOutlineColorRow(to: stack)
+
         addPopup(to: stack, title: "Canvas",
                  items: DemoSceneController.CanvasBackground.allCases.map(\.title),
                  selected: scene.currentCanvasBackground.rawValue) { [weak self] index in
             guard let bg = DemoSceneController.CanvasBackground(rawValue: index) else { return }
             self?.scene.setCanvasBackground(bg)
         }
+    }
+
+    private func addOutlineColorRow(to stack: NSStackView) {
+        let row = NSStackView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.distribution = .fill
+        row.spacing = 6.0
+
+        let label = NSTextField(labelWithString: "Outline color")
+        label.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        row.addArrangedSubview(label)
+
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for preset in outlineColorPresets {
+            popup.addItem(withTitle: preset.name)
+        }
+        popup.addItem(withTitle: "Custom…")
+        popup.selectItem(at: 0)
+        popup.controlSize = .small
+        popup.target = self
+        popup.action = #selector(onOutlineColorPopupChanged(_:))
+        popup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(popup)
+        outlineColorPopup = popup
+
+        let well = NSColorWell()
+        well.translatesAutoresizingMaskIntoConstraints = false
+        well.color = outlineColorPresets[0].nsColor
+        well.target = self
+        well.action = #selector(onOutlineColorWellChanged(_:))
+        well.controlSize = .small
+        well.toolTip = "Pick Custom Outline Color"
+        NSLayoutConstraint.activate([
+            well.widthAnchor.constraint(equalToConstant: 28),
+            well.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        row.addArrangedSubview(well)
+        outlineColorWell = well
+
+        stack.addArrangedSubview(row)
+        NSLayoutConstraint.activate([
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
     }
 
     private func addMorphTargetsSection(to stack: NSStackView) {
@@ -451,6 +522,16 @@ final class InspectorView: NSObject {
         transparencyLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         transparencyLabel.textColor = .systemBlue
         stack.addArrangedSubview(transparencyLabel)
+
+        let overlayBtn = makeButton("Floating Companion Window", action: #selector(toggleOverlayClicked))
+        stack.addArrangedSubview(overlayBtn)
+        self.overlayButton = overlayBtn
+
+        let ovLabel = NSTextField(labelWithString: "Floating Window: Closed")
+        ovLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        ovLabel.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(ovLabel)
+        self.overlayLabel = ovLabel
 
         statusBadge = NSTextField(labelWithString: "● Rendering | Orbit: ON")
         statusBadge.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
@@ -857,6 +938,65 @@ final class InspectorView: NSObject {
             } else {
                 binding.rowView.isHidden = !binding.name.lowercased().contains(query)
             }
+        }
+    }
+
+    // MARK: - Overlay Window Actions
+
+    func syncOverlayUI(active: Bool) {
+        overlayLabel?.stringValue = active ? "Floating Window: Active (Metal Overlay)" : "Floating Window: Closed"
+        overlayLabel?.textColor = active ? .systemGreen : .secondaryLabelColor
+        overlayButton?.title = active ? "Close Companion Window" : "Floating Companion Window"
+    }
+
+    @objc func toggleOverlayClicked() {
+        let active = scene.toggleOverlayWindow()
+        syncOverlayUI(active: active)
+    }
+
+    // MARK: - Outline Color Actions
+
+    func setOutlineColorPreset(index: Int) {
+        guard index >= 0 && index < outlineColorPresets.count else { return }
+        let preset = outlineColorPresets[index]
+        setOutlineColor(r: preset.color.r, g: preset.color.g, b: preset.color.b)
+    }
+
+    func setOutlineColor(r: Float, g: Float, b: Float) {
+        scene.setOutlineColor(r: r, g: g, b: b)
+        let nsColor = NSColor(srgbRed: CGFloat(r), green: CGFloat(g), blue: CGFloat(b), alpha: 1.0)
+        outlineColorWell?.color = nsColor
+        if let idx = outlineColorPresets.firstIndex(where: {
+            abs($0.color.r - r) < 0.02 && abs($0.color.g - g) < 0.02 && abs($0.color.b - b) < 0.02
+        }) {
+            outlineColorPopup?.selectItem(at: idx)
+        } else {
+            outlineColorPopup?.selectItem(withTitle: "Custom…")
+        }
+    }
+
+    @objc private func onOutlineColorPopupChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        if idx >= 0 && idx < outlineColorPresets.count {
+            let preset = outlineColorPresets[idx]
+            outlineColorWell?.color = preset.nsColor
+            scene.setOutlineColor(r: preset.color.r, g: preset.color.g, b: preset.color.b)
+        }
+    }
+
+    @objc private func onOutlineColorWellChanged(_ sender: NSColorWell) {
+        let color = sender.color.usingColorSpace(.sRGB) ?? sender.color
+        let r = Float(color.redComponent)
+        let g = Float(color.greenComponent)
+        let b = Float(color.blueComponent)
+        scene.setOutlineColor(r: r, g: g, b: b)
+
+        if let idx = outlineColorPresets.firstIndex(where: {
+            abs($0.color.r - r) < 0.02 && abs($0.color.g - g) < 0.02 && abs($0.color.b - b) < 0.02
+        }) {
+            outlineColorPopup?.selectItem(at: idx)
+        } else {
+            outlineColorPopup?.selectItem(withTitle: "Custom…")
         }
     }
 }
