@@ -116,19 +116,64 @@ private let kHTCAPTION: UInt = 2
 /// - Supports optional click-through (`isClickThrough = true`) so user clicks pass to apps underneath.
 @MainActor
 public final class FilamentOverlayWindow {
+    private final class Storage: @unchecked Sendable {
+        var hwnd: HWND?
+        var headlessSwapChain: OpaquePointer?
+        var memDC: UnsafeMutableRawPointer?
+        var dibBitmap: UnsafeMutableRawPointer?
+        var oldBitmap: UnsafeMutableRawPointer?
+        var dibBits: UnsafeMutablePointer<UInt8>?
+
+        func detach() -> (sc: OpaquePointer?, mdc: UnsafeMutableRawPointer?, bmp: UnsafeMutableRawPointer?, old: UnsafeMutableRawPointer?, wnd: HWND?) {
+            let res = (headlessSwapChain, memDC, dibBitmap, oldBitmap, hwnd)
+            headlessSwapChain = nil
+            memDC = nil
+            dibBitmap = nil
+            oldBitmap = nil
+            hwnd = nil
+            dibBits = nil
+            return res
+        }
+    }
+
+    private let storage = Storage()
+
     public let engine: FilamentEngine
     public let model: FilamentModel
     public let camera: FilamentOrbitCamera
-    public private(set) var hwnd: HWND?
+
+    public var hwnd: HWND? {
+        get { storage.hwnd }
+        set { storage.hwnd = newValue }
+    }
 
     public let width: UInt32
     public let height: UInt32
 
-    private var headlessSwapChain: OpaquePointer?
-    private var memDC: UnsafeMutableRawPointer?
-    private var dibBitmap: UnsafeMutableRawPointer?
-    private var oldBitmap: UnsafeMutableRawPointer?
-    private var dibBits: UnsafeMutablePointer<UInt8>?
+    private var headlessSwapChain: OpaquePointer? {
+        get { storage.headlessSwapChain }
+        set { storage.headlessSwapChain = newValue }
+    }
+
+    private var memDC: UnsafeMutableRawPointer? {
+        get { storage.memDC }
+        set { storage.memDC = newValue }
+    }
+
+    private var dibBitmap: UnsafeMutableRawPointer? {
+        get { storage.dibBitmap }
+        set { storage.dibBitmap = newValue }
+    }
+
+    private var oldBitmap: UnsafeMutableRawPointer? {
+        get { storage.oldBitmap }
+        set { storage.oldBitmap = newValue }
+    }
+
+    private var dibBits: UnsafeMutablePointer<UInt8>? {
+        get { storage.dibBits }
+        set { storage.dibBits = newValue }
+    }
 
     private var rgbaBuffer: [UInt8]
     private var currentPositionX: Int32 = 100
@@ -163,11 +208,7 @@ public final class FilamentOverlayWindow {
 
     deinit {
         let eng = engine
-        let sc = headlessSwapChain
-        let mdc = memDC
-        let bmp = dibBitmap
-        let old = oldBitmap
-        let wnd = hwnd
+        let (sc, mdc, bmp, old, wnd) = storage.detach()
 
         FilamentMainActor.perform {
             if let wnd {
