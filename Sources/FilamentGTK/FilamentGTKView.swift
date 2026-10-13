@@ -25,6 +25,7 @@ public final class FilamentGTKView {
 
     public init(engine: FilamentEngine) {
         self.engine = engine
+        engine.setTransparent(isTransparent)
     }
 
     public convenience init() {

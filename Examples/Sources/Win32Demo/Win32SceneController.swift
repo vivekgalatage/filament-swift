@@ -11,6 +11,7 @@ final class Win32SceneController {
     let pbrController: FilamentPBRController
     let model: FilamentModel
     let camera: FilamentOrbitCamera
+    private(set) var currentModelName: String?
 
     private var animationTime: Float = 0.0
     private var isAnimationPlaying: Bool = true
@@ -40,10 +41,12 @@ final class Win32SceneController {
 
         do {
             try model.loadGlb(at: asset.url)
+            currentModelName = asset.name
             print("[Win32Demo] Loaded model: \(asset.name)")
         } catch {
             print("[Win32Demo] Failed to load \(asset.url.path): \(error)")
             model.unload()
+            currentModelName = nil
         }
 
         if model.hasAnimations {
@@ -54,13 +57,18 @@ final class Win32SceneController {
         model.setRotation(radiansY: 0.0)
     }
 
+    func selectAnimation(at index: Int) {
+        guard model.hasAnimations, index >= 0, index < model.animations.count else { return }
+        model.selectAnimation(at: index)
+        animationTime = 0.0
+        print("[Win32Demo] Active animation: \(model.animations[index].name)")
+    }
+
     func cycleNextAnimation() {
         guard model.hasAnimations else { return }
         let currentIdx = model.activeAnimationIndex ?? 0
         let nextIdx = (currentIdx + 1) % model.animations.count
-        model.selectAnimation(at: nextIdx)
-        animationTime = 0.0
-        print("[Win32Demo] Active animation: \(model.animations[nextIdx].name)")
+        selectAnimation(at: nextIdx)
     }
 
     // MARK: - Mouse & Camera Controls

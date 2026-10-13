@@ -32,6 +32,7 @@ public final class FilamentWin32View {
 
     public init(engine: FilamentEngine) {
         self.engine = engine
+        engine.setTransparent(isTransparent)
     }
 
     public convenience init() {

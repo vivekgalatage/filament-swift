@@ -147,6 +147,12 @@ public final class FilamentEngine: @unchecked Sendable {
         storage.cameraId = cameraEntity.getId()
         let cam = FilamentBridge.getCamera(created, cameraEntity)
 
+        if let r = ren {
+            // Enable per-frame color buffer clearing to the default studio background
+            // (Filament's Renderer::ClearOptions::clear defaults to false).
+            FilamentBridge.setTransparent(r, false)
+        }
+
         if let v = vw {
             if let scn { FilamentBridge.setViewScene(v, scn) }
             if let cam { FilamentBridge.setViewCamera(v, cam) }

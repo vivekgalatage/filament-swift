@@ -21,6 +21,7 @@ final class Win32DemoApp {
     private var renderChild: HWND?
     private var controlPanel: Win32ControlPanel?
     private var scene: Win32SceneController?
+    private var panelBrush: UnsafeMutableRawPointer?
 
     private var isRunning: Bool = true
     private var lastFrameTime: Double = 0.0
@@ -30,6 +31,9 @@ final class Win32DemoApp {
         print("[Win32Demo] Initializing Win32 host window...")
         _ = win32CoInitializeEx(nil, COINIT_APARTMENTTHREADED_VALUE)
         defer { CoUninitialize() }
+
+        enableWin32VisualStyles()
+        panelBrush = win32CreateSolidBrush(PANEL_BG_COLORREF)
 
         guard registerWindowClasses() else {
             print("[Win32Demo] Failed to register window classes.")
@@ -51,6 +55,7 @@ final class Win32DemoApp {
     private func registerWindowClasses() -> Bool {
         let hInstance = GetModuleHandleW(nil)
         let arrow = LoadCursorW(nil, UnsafePointer<WCHAR>(bitPattern: 32512)) // IDC_ARROW
+        let bgBrush = panelBrush.flatMap { HBRUSH(OpaquePointer($0)) }
 
         return Self.frameClassName.withCString(encodedAs: UTF16.self) { frameWide in
             Self.panelClassName.withCString(encodedAs: UTF16.self) { panelWide in
@@ -94,12 +99,27 @@ final class Win32DemoApp {
                     frame.hInstance = hInstance
                     frame.lpszClassName = frameWide
                     frame.hCursor = arrow
+                    frame.hbrBackground = bgBrush
                     guard RegisterClassExW(&frame) != 0 else { return false }
 
                     var panel = WNDCLASSEXW()
                     panel.cbSize = UINT(MemoryLayout<WNDCLASSEXW>.size)
                     panel.style = UINT(CS_HREDRAW | CS_VREDRAW)
                     panel.lpfnWndProc = { hwnd, uMsg, wParam, lParam -> LRESULT in
+                        if uMsg == WM_CTLCOLORSTATIC || uMsg == WM_CTLCOLORBTN {
+                            let hdc = ptrFromWPARAM(UInt64(wParam))
+                            let child = hwndFromLPARAM(lParam)
+                            return MainActor.assumeIsolated {
+                                guard let app = Win32DemoApp.shared, let brush = app.panelBrush else {
+                                    return DefWindowProcW(hwnd, uMsg, wParam, lParam)
+                                }
+                                _ = win32SetBkMode(hdc, OPAQUE_BKMODE)
+                                _ = win32SetBkColor(hdc, PANEL_BG_COLORREF)
+                                let textColor = app.controlPanel?.textColor(for: child) ?? PANEL_TEXT_COLORREF
+                                _ = win32SetTextColor(hdc, textColor)
+                                return Int64(Int(bitPattern: brush))
+                            }
+                        }
                         if Win32DemoApp.dispatchControlMessage(uMsg, UInt64(wParam), lParam) {
                             return 1
                         }
@@ -108,6 +128,7 @@ final class Win32DemoApp {
                     panel.hInstance = hInstance
                     panel.lpszClassName = panelWide
                     panel.hCursor = arrow
+                    panel.hbrBackground = bgBrush
                     guard RegisterClassExW(&panel) != 0 else { return false }
 
                     var render = WNDCLASSEXW()
@@ -165,7 +186,7 @@ final class Win32DemoApp {
     }
 
     private func createWindow() -> Bool {
-        let windowTitle = "Filament Swift — Win32 Demo (Windows)"
+        let windowTitle = "Filament Swift — Win32 PBR Demo (Windows)"
 
         let hwnd = Self.frameClassName.withCString(encodedAs: UTF16.self) { classWide in
             windowTitle.withCString(encodedAs: UTF16.self) { titleWide in
@@ -173,11 +194,11 @@ final class Win32DemoApp {
                     0,
                     classWide,
                     titleWide,
-                    DWORD(WS_OVERLAPPEDWINDOW | WS_VISIBLE),
+                    DWORD(WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VISIBLE),
                     CW_USEDEFAULT,
                     CW_USEDEFAULT,
-                    1100,
-                    820,
+                    1220,
+                    850,
                     nil,
                     nil,
                     GetModuleHandleW(nil),
@@ -187,6 +208,7 @@ final class Win32DemoApp {
         }
         guard let hwnd else { return false }
         self.hwnd = hwnd
+        enableDarkTitleBar(hwnd)
 
         self.controlPanel = Win32ControlPanel(parent: hwnd, panelClassName: Self.panelClassName)
         return true
@@ -206,7 +228,7 @@ final class Win32DemoApp {
                 0,
                 classWide,
                 nil,
-                DWORD(WS_CHILD | WS_VISIBLE | WS_TABSTOP),
+                DWORD(WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_TABSTOP),
                 0,
                 0,
                 renderWidth,
@@ -228,7 +250,9 @@ final class Win32DemoApp {
 
         let width = UInt32(max(1, renderWidth))
         let height = UInt32(max(1, clientHeight))
-        self.scene = Win32SceneController(renderChild: renderChild, width: width, height: height)
+        let createdScene = Win32SceneController(renderChild: renderChild, width: width, height: height)
+        self.scene = createdScene
+        controlPanel?.syncModelAndAnimations(modelName: createdScene.currentModelName, model: createdScene.model)
 
         print("[Win32Demo] Filament host view attached to render HWND \(renderChild).")
         print("[Win32Demo] Mouse: Left-Drag Orbit | Right/Middle/Shift-Drag Pan | Wheel Zoom | Double-Click Reset")
@@ -256,8 +280,9 @@ final class Win32DemoApp {
     // MARK: - Actions & Input
 
     func openModelFromDialog() {
-        guard let url = Win32FileDialog.promptForGlbFile(owner: hwnd) else { return }
-        scene?.openModel(at: url)
+        guard let url = Win32FileDialog.promptForGlbFile(owner: hwnd), let scene else { return }
+        scene.openModel(at: url)
+        controlPanel?.syncModelAndAnimations(modelName: scene.currentModelName, model: scene.model)
     }
 
     func handleKeyDown(key: Int) {
@@ -268,8 +293,14 @@ final class Win32DemoApp {
             scene?.resetCamera()
         case 38: // VK_UP
             scene?.cycleNextAnimation()
+            if let scene {
+                controlPanel?.syncModelAndAnimations(modelName: scene.currentModelName, model: scene.model)
+            }
         case 32: // VK_SPACE
             scene?.toggleAutoOrbit()
+            if let scene {
+                controlPanel?.syncAutoOrbit(scene.camera.isAutoOrbiting)
+            }
         default:
             break
         }
@@ -315,6 +346,10 @@ final class Win32DemoApp {
         controlPanel = nil
         renderChild = nil
         hwnd = nil
+        if let brush = panelBrush {
+            _ = win32DeleteObject(brush)
+            panelBrush = nil
+        }
     }
 
     nonisolated static func dispatchControlMessage(_ uMsg: UInt32, _ wParam: UInt64, _ lParam: Int64) -> Bool {
@@ -347,7 +382,7 @@ final class Win32DemoApp {
                 let checked = win32SendMessageW(control, BM_GETCHECK, 0, 0) == BST_CHECKED
                 MainActor.assumeIsolated {
                     guard let app = Win32DemoApp.shared else { return }
-                    app.controlPanel?.handleCheckbox(id: id, checked: checked, pbr: app.scene?.pbrController)
+                    app.controlPanel?.handleCheckbox(id: id, checked: checked, scene: app.scene)
                 }
                 return true
             }
@@ -357,7 +392,7 @@ final class Win32DemoApp {
                 guard selection >= 0 else { return false }
                 MainActor.assumeIsolated {
                     guard let app = Win32DemoApp.shared else { return }
-                    app.controlPanel?.handleCombo(id: id, selection: selection, pbr: app.scene?.pbrController)
+                    app.controlPanel?.handleCombo(id: id, selection: selection, scene: app.scene)
                 }
                 return true
             }
