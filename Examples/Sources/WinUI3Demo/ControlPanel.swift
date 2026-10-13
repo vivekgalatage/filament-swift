@@ -26,6 +26,7 @@ import Filament
 @MainActor
 final class ControlPanel {
     private let host: DemoHost
+    private let scrollViewer = ScrollViewer()
     private let root = StackPanel()
 
     private var sliders: [SliderBinding] = []
@@ -42,13 +43,14 @@ final class ControlPanel {
         build()
     }
 
-    var rootElement: StackPanel { root }
+    var rootElement: UIElement { scrollViewer }
 
     // MARK: - Construction
 
     private func build() {
         root.spacing = 8
         root.padding = WinUI.Thickness(left: 16, top: 16, right: 16, bottom: 16)
+        scrollViewer.content = root
 
         let title = TextBlock()
         title.text = "Filament Swift"

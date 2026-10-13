@@ -88,7 +88,6 @@ final class DemoHost {
     private(set) var pbr: FilamentPBRController!
     private(set) var camera: FilamentOrbitCamera!
     private var hostView: FilamentWin32View?
-    private var renderTimer: DispatcherQueueTimer?
 
     // Model & animation state.
     private(set) var currentModelName: String?
@@ -121,7 +120,7 @@ final class DemoHost {
         setupFilament()
         createWindows()
         createPanelIsland()
-        startRenderTimer()
+        lastFrame = currentMediaTimeSeconds()
 
         let exitCode = messageLoop()
         shutdown()
@@ -320,26 +319,12 @@ final class DemoHost {
                 _ = TranslateMessage(&msg)
                 _ = DispatchMessageW(&msg)
             }
+            onFrame()
             _ = win32MsgWaitForMultipleObjectsEx(0, nil, 8, QS_ALLINPUT, MWMO_INPUTAVAILABLE)
         }
     }
 
     // MARK: - Rendering & Teardown
-
-    private func startRenderTimer() {
-        do {
-            let controller = try DispatcherQueueController.createOnCurrentThread()
-            let timer = controller.createTimer()
-            timer.interval = Duration(milliseconds: 1000.0 / 60.0)
-            timer.add_Tick { [weak self] _, _ in
-                MainActor.assumeIsolated { self?.onFrame() }
-            }
-            timer.start()
-            renderTimer = timer
-        } catch {
-            print("[WinUI3Demo] Failed to start the render timer: \(error)")
-        }
-    }
 
     private func onFrame() {
         guard let hostView else { return }
@@ -369,8 +354,6 @@ final class DemoHost {
     }
 
     private func shutdown() {
-        renderTimer?.stop()
-        renderTimer = nil
         hostView?.stopRendering()
         model?.unload()
         model = nil

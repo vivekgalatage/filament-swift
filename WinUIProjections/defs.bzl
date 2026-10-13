@@ -31,12 +31,14 @@ def declare_projections(modules = PROJECTION_MODULES, visibility = ["//visibilit
     for module, deps in modules.items():
         if module == "CWinRT":
             hdrs = native.glob(["Sources/CWinRT/include/**/*.h"], allow_empty = True)
+            textual_hdrs = native.glob(["Sources/CWinRT/include/**/*.modulemap"], allow_empty = True)
             c_srcs = native.glob(["Sources/CWinRT/**/*.c"], allow_empty = True)
             compat = ["@platforms//os:windows"] if hdrs else [":projections_not_generated"]
             cc_library(
                 name = "CWinRT",
                 srcs = c_srcs,
                 hdrs = hdrs,
+                textual_hdrs = textual_hdrs,
                 includes = ["Sources/CWinRT/include"] if hdrs else [],
                 target_compatible_with = compat,
                 deps = deps,

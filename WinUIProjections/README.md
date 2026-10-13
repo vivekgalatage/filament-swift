@@ -76,27 +76,27 @@ if the build fails in the control panel.
 ## Prerequisites
 
 - Windows 10 1809+ / Windows 11
-- **Swift 6.x for Windows** (`swift-build` releases carry builds the official toolchain does
-  not always publish)
-- **Windows SDK 10.0.26100**
-- `swiftwinrt.exe`, built with CMake from
-  [thebrowsercompany/swift-winrt](https://github.com/thebrowsercompany/swift-winrt)
-- The **Windows App SDK** NuGet package, and the runtime installed (or self-contained)
+- **Swift 6.x for Windows**
+- **Windows 10/11 SDK** (`Windows.winmd`)
+- **Windows App Runtime 1.6** installed on the machine:
+  ```powershell
+  winget install Microsoft.WindowsAppRuntime.1.6
+  ```
 
-## Build
+`swiftwinrt.exe` (`TheBrowserCompany.SwiftWinRT` `0.6.0`) and the `Microsoft.WindowsAppSDK`
+(`1.6.250602001`) NuGet package are downloaded and extracted automatically by
+`generate_winui_projection.py`.
 
-```bash
-# 0. Prebuilt Filament SDK (shared with the rest of the repo)
-python scripts/ensure_filament.py
-export FILAMENT_DIR="$PWD/.filament"
+## Build & Run
 
+```powershell
 # 1. Generate the WinRT projections (once; re-run when projections.json changes)
-python WinUIProjections/scripts/generate_winui_projection.py \
-    --swiftwinrt /path/to/swiftwinrt.exe \
-    --nuget-dir tools/nuget_packages
+python WinUIProjections\scripts\generate_winui_projection.py
 
-# 2. Build + run (the demo lives in the Examples package)
-swift build -c release --package-path Examples --product WinUI3Demo
+# 2. Build + run the WinUI 3 demo (SwiftPM or Bazel)
+swift run --package-path Examples WinUI3Demo
+# or:
+bazel run //Examples:WinUI3Demo
 ```
 
 `generate_winui_projection.py` writes `CWinRT`, `WindowsFoundation`, `UWP`, `WinAppSDK` and

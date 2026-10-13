@@ -49,6 +49,8 @@ cc_library(
             "opengl32.lib",
             "shlwapi.lib",
             "ole32.lib",
+            "oleaut32.lib",
+            "runtimeobject.lib",
             "shell32.lib",
             "comdlg32.lib",
             "dwmapi.lib",

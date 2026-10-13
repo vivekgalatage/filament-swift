@@ -31,9 +31,12 @@
     "Microsoft.UI.Xaml.Hosting.WindowsXamlManager",
     "Microsoft.UI.Xaml.Hosting.DesktopWindowXamlSource",
     "Microsoft.UI.Xaml.Media.SolidColorBrush",
-    "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider"
+    "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider",
+    "Windows.Foundation.IPropertyValue"
   ],
   "exclude": [
+    "Windows.Devices.Enumeration.Panel",
+    "Windows.Management.Deployment.PackageStatus",
     "Windows.Media.Playback"
   ]
 }

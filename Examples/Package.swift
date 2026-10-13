@@ -121,6 +121,8 @@ let windowsLinkerSettings: [LinkerSetting] = [
     .linkedLibrary("opengl32"),
     .linkedLibrary("shlwapi"),
     .linkedLibrary("ole32"),
+    .linkedLibrary("oleaut32"),
+    .linkedLibrary("runtimeobject"),
     .linkedLibrary("shell32"),
     .linkedLibrary("comdlg32"),
     .linkedLibrary("dwmapi"),
