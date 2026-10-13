@@ -24,6 +24,8 @@ namespace filament {
     class SwapChain;
     class IndirectLight;
     class ColorGrading;
+    class Material;
+    class MaterialInstance;
 
 #ifndef TNT_FILAMENT_BACKEND_DRIVERENUMS_H
     namespace backend {
@@ -182,5 +184,25 @@ namespace FilamentBridge {
     void applyMorphWeights(filament::Engine* engine, GlbContext* ctx, const float* weights, size_t count);
     void resetMorphWeights(filament::Engine* engine, GlbContext* ctx);
     void destroyGlbContext(filament::Engine* engine, filament::Scene* scene, GlbContext* ctx);
+    void hideGlbAsset(filament::Scene* scene, GlbContext* ctx);
+    void showGlbAsset(filament::Scene* scene, GlbContext* ctx);
+    void setGlbPriority(filament::Engine* engine, GlbContext* ctx, uint8_t priority);
+
+    // ---------------------------------------------------------------------------
+    // Material & MaterialInstance lifecycle and controls
+    // ---------------------------------------------------------------------------
+    filament::Material* createMaterialFromPackage(filament::Engine* engine, const void* data, size_t size);
+    void destroyMaterial(filament::Engine* engine, filament::Material* material);
+
+    filament::MaterialInstance* createMaterialInstance(filament::Material* material);
+    void destroyMaterialInstance(filament::Engine* engine, filament::MaterialInstance* instance);
+
+    void setMaterialParameterFloat(filament::MaterialInstance* inst, const char* name, float v);
+    void setMaterialParameterFloat3(filament::MaterialInstance* inst, const char* name, float x, float y, float z);
+    void setMaterialParameterFloat4(filament::MaterialInstance* inst, const char* name, float x, float y, float z, float w);
+
+    void setMaterialOnRenderable(filament::Engine* engine, utils::Entity entity, filament::MaterialInstance* inst, size_t primitiveIndex = 0);
+    void setMaterialOnAllPrimitives(filament::Engine* engine, utils::Entity entity, filament::MaterialInstance* inst);
+    void applyMaterialToGlbAsset(filament::Engine* engine, GlbContext* ctx, filament::MaterialInstance* inst);
 
 } // namespace FilamentBridge

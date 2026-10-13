@@ -111,6 +111,7 @@ public final class FilamentModel {
         hasCustomMorphWeights = false
         cachedWeightsBuffer.removeAll()
         activeAnimationIndex = nil
+        isVisible = false
     }
 
     /// Selects active animation index or nil to disable animation.
@@ -238,6 +239,7 @@ public final class FilamentModel {
                 throw NSError(domain: "FilamentModel", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to parse and load GLB model via gltfio"])
             }
             self.glbContext = loadedCtx
+            self.isVisible = true
             refreshAnimations()
             refreshMorphTargets()
         }
@@ -279,5 +281,44 @@ public final class FilamentModel {
     public func setRotation(radiansY: Float) {
         guard let eng = engineRef.engine, let ctx = glbContext else { return }
         FilamentBridge.setModelRotation(eng, ctx, radiansY)
+    }
+
+    /// Replaces the material on all renderable primitives across this model's entities with the given material instance.
+    public func applyMaterialInstance(_ materialInstance: OpaquePointer) {
+        guard let eng = engineRef.engine, let ctx = glbContext else { return }
+        FilamentBridge.applyMaterialToGlbAsset(eng, ctx, materialInstance)
+    }
+
+    /// Applies a custom toon cel material to all renderable primitives of this model.
+    public func applyToonMaterial(_ toonMaterial: FilamentToonMaterial) {
+        guard let inst = toonMaterial.rawInstance else { return }
+        applyMaterialInstance(inst)
+    }
+
+    /// Applies an inverted hull outline material to all renderable primitives of this model.
+    public func applyOutlineMaterial(_ outlineMaterial: FilamentToonOutlineMaterial) {
+        guard let inst = outlineMaterial.rawInstance else { return }
+        applyMaterialInstance(inst)
+    }
+
+    /// Whether this model's entities are currently added to the Filament scene.
+    public private(set) var isVisible: Bool = true
+
+    /// Toggles the visibility of this model by adding or removing its entities from the scene.
+    public func setVisible(_ visible: Bool) {
+        guard let scn = engineRef.scene, let ctx = glbContext else { return }
+        if isVisible == visible { return }
+        isVisible = visible
+        if visible {
+            FilamentBridge.showGlbAsset(scn, ctx)
+        } else {
+            FilamentBridge.hideGlbAsset(scn, ctx)
+        }
+    }
+
+    /// Sets the coarse draw priority (0..7, default is 4; 7 is rendered last).
+    public func setPriority(_ priority: UInt8) {
+        guard let eng = engineRef.engine, let ctx = glbContext else { return }
+        FilamentBridge.setGlbPriority(eng, ctx, priority)
     }
 }

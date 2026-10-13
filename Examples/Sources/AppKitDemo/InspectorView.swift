@@ -132,6 +132,7 @@ final class InspectorView: NSObject {
 
         addHeader(to: content)
         addModelSection(to: content)
+        addToonShadingSection(to: content)
         addMorphTargetsSection(to: content)
         addLightingSection(to: content)
         addToneMappingSection(to: content)
@@ -205,6 +206,54 @@ final class InspectorView: NSObject {
             modelLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             animationContainer.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
+    }
+
+    private func addToonShadingSection(to stack: NSStackView) {
+        stack.addArrangedSubview(makeSectionHeader("Cartoon Cel Shader"))
+
+        addPopup(to: stack, title: "Style",
+                 items: DemoSceneController.ShadingMode.allCases.map(\.title),
+                 selected: scene.currentShadingMode.rawValue) { [weak self] index in
+            guard let mode = DemoSceneController.ShadingMode(rawValue: index) else { return }
+            self?.scene.setShadingMode(mode)
+        }
+
+        addPopup(to: stack, title: "Cel color",
+                 items: ["Cartoon White (Furu)", "Warm Peach", "Classic Gray", "Jerry Brown", "Anime Sky Blue"],
+                 selected: 0) { [weak self] index in
+            switch index {
+            case 0: self?.scene.setToonBaseColor(r: 0.96, g: 0.95, b: 0.94)
+            case 1: self?.scene.setToonBaseColor(r: 0.95, g: 0.70, b: 0.50)
+            case 2: self?.scene.setToonBaseColor(r: 0.65, g: 0.70, b: 0.75)
+            case 3: self?.scene.setToonBaseColor(r: 0.75, g: 0.55, b: 0.35)
+            case 4: self?.scene.setToonBaseColor(r: 0.40, g: 0.70, b: 0.95)
+            default: break
+            }
+        }
+
+        addSlider(to: stack, title: "Shadow band", range: -0.5...0.8,
+                  value: 0.05,
+                  format: { String(format: "%.2f", $0) }) { [weak self] val in
+            self?.scene.setToonShadowThreshold(Float(val))
+        }
+
+        addSlider(to: stack, title: "Highlight band", range: 0.2...1.0,
+                  value: 0.75,
+                  format: { String(format: "%.2f", $0) }) { [weak self] val in
+            self?.scene.setToonHighlightThreshold(Float(val))
+        }
+
+        addSlider(to: stack, title: "Edge feather", range: 0.001...0.1,
+                  value: 0.015,
+                  format: { String(format: "%.3f", $0) }) { [weak self] val in
+            self?.scene.setToonEdgeFeather(Float(val))
+        }
+
+        addSlider(to: stack, title: "Outline width", range: 0.5...8.0,
+                  value: 2.5,
+                  format: { String(format: "%.1f px", $0) }) { [weak self] val in
+            self?.scene.setOutlineThickness(Float(val))
+        }
     }
 
     private func addMorphTargetsSection(to stack: NSStackView) {
@@ -529,6 +578,13 @@ final class InspectorView: NSObject {
         }
 
         syncMorphTargetsUI()
+        syncShadingMode()
+    }
+
+    func syncShadingMode() {
+        for binding in popupBindings where binding.key == "Style" {
+            binding.popup.selectItem(at: scene.currentShadingMode.rawValue)
+        }
     }
 
     func syncMorphTargetsUI() {

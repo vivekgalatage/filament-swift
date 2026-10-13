@@ -1,0 +1,80 @@
+material {
+    name : ToonCel,
+    shadingModel : unlit,
+    culling : back,
+    parameters : [
+        {
+            type : float4,
+            name : baseColor
+        },
+        {
+            type : float3,
+            name : lightColor
+        },
+        {
+            type : float3,
+            name : shadowColorMultiplier
+        },
+        {
+            type : float3,
+            name : lightDirection
+        },
+        {
+            type : float,
+            name : shadowThreshold
+        },
+        {
+            type : float,
+            name : highlightThreshold
+        },
+        {
+            type : float,
+            name : feather
+        }
+    ],
+    requires : [
+        position,
+        tangents,
+        uv0
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+
+        // Normalize interpolated geometric normal and light direction
+        vec3 N = normalize(getWorldGeometricNormalVector());
+        vec3 L = normalize(materialParams.lightDirection);
+
+        // Lambertian cosine law: N dot L in range [-1.0, 1.0]
+        float nDotL = dot(N, L);
+
+        // Anti-aliased thresholding using smoothstep to prevent pixel crawling
+        float eps = max(materialParams.feather, 0.001);
+
+        // Shadow to midtone boundary
+        float shadowFactor = smoothstep(materialParams.shadowThreshold - eps,
+                                        materialParams.shadowThreshold + eps,
+                                        nDotL);
+
+        // Midtone to highlight boundary (3-tone cartoon shading)
+        float highlightFactor = smoothstep(materialParams.highlightThreshold - eps,
+                                           materialParams.highlightThreshold + eps,
+                                           nDotL);
+
+        // Cartoon cel color tiers:
+        // 1. Shadow tone: baseColor * shadowColorMultiplier
+        // 2. Midtone tone: pure local painted cel color
+        // 3. Highlight tone: baseColor illuminated by lightColor
+        vec3 shadowColor = materialParams.baseColor.rgb * materialParams.shadowColorMultiplier;
+        vec3 midtoneColor = materialParams.baseColor.rgb;
+        vec3 highlightColor = materialParams.baseColor.rgb * materialParams.lightColor;
+
+        // Quantize into distinct cartoon bands
+        vec3 diffuseTone = mix(shadowColor, midtoneColor, shadowFactor);
+        vec3 finalRgb = mix(diffuseTone, highlightColor, highlightFactor);
+
+        material.baseColor = vec4(finalRgb, materialParams.baseColor.a);
+    }
+}

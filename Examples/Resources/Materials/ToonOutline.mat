@@ -1,0 +1,37 @@
+material {
+    name : ToonOutline,
+    shadingModel : unlit,
+    culling : front,
+    parameters : [
+        {
+            type : float4,
+            name : outlineColor
+        },
+        {
+            type : float,
+            name : outlineThickness
+        }
+    ],
+    requires : [
+        position,
+        tangents
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        // Perspective distance compensation for uniform screen-space outline width
+        float cameraDist = length(material.worldPosition.xyz - getWorldCameraPosition());
+        vec3 normal = material.worldNormal;
+
+        // Extrude back-faces outward along normal vector
+        material.worldPosition.xyz += normal * (materialParams.outlineThickness * cameraDist * 0.001);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.outlineColor;
+    }
+}

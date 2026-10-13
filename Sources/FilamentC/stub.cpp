@@ -625,4 +625,105 @@ namespace FilamentBridge {
         delete ctx;
     }
 
+    void hideGlbAsset(filament::Scene* scene, GlbContext* ctx) {
+        if (!scene || !ctx || !ctx->asset) return;
+        scene->removeEntities(ctx->asset->getEntities(), ctx->asset->getEntityCount());
+    }
+
+    void showGlbAsset(filament::Scene* scene, GlbContext* ctx) {
+        if (!scene || !ctx || !ctx->asset) return;
+        scene->addEntities(ctx->asset->getEntities(), ctx->asset->getEntityCount());
+    }
+
+    void setGlbPriority(filament::Engine* engine, GlbContext* ctx, uint8_t priority) {
+        if (!engine || !ctx || !ctx->asset) return;
+        auto& rcm = engine->getRenderableManager();
+        const auto* entities = ctx->asset->getEntities();
+        size_t count = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < count; ++i) {
+            auto instance = rcm.getInstance(entities[i]);
+            if (instance) {
+                rcm.setPriority(instance, priority);
+            }
+        }
+    }
+
+    filament::Material* createMaterialFromPackage(filament::Engine* engine, const void* data, size_t size) {
+        if (!engine || !data || size == 0) return nullptr;
+        return filament::Material::Builder()
+            .package(data, size)
+            .build(*engine);
+    }
+
+    void destroyMaterial(filament::Engine* engine, filament::Material* material) {
+        if (engine && material) {
+            engine->destroy(material);
+        }
+    }
+
+    filament::MaterialInstance* createMaterialInstance(filament::Material* material) {
+        return material ? material->createInstance() : nullptr;
+    }
+
+    void destroyMaterialInstance(filament::Engine* engine, filament::MaterialInstance* instance) {
+        if (engine && instance) {
+            engine->destroy(instance);
+        }
+    }
+
+    void setMaterialParameterFloat(filament::MaterialInstance* inst, const char* name, float v) {
+        if (inst && name) {
+            inst->setParameter(name, v);
+        }
+    }
+
+    void setMaterialParameterFloat3(filament::MaterialInstance* inst, const char* name, float x, float y, float z) {
+        if (inst && name) {
+            inst->setParameter(name, filament::math::float3(x, y, z));
+        }
+    }
+
+    void setMaterialParameterFloat4(filament::MaterialInstance* inst, const char* name, float x, float y, float z, float w) {
+        if (inst && name) {
+            inst->setParameter(name, filament::math::float4(x, y, z, w));
+        }
+    }
+
+    void setMaterialOnRenderable(filament::Engine* engine, utils::Entity entity, filament::MaterialInstance* inst, size_t primitiveIndex) {
+        if (!engine || !inst) return;
+        auto& rcm = engine->getRenderableManager();
+        auto instance = rcm.getInstance(entity);
+        if (instance && primitiveIndex < rcm.getPrimitiveCount(instance)) {
+            rcm.setMaterialInstanceAt(instance, primitiveIndex, inst);
+        }
+    }
+
+    void setMaterialOnAllPrimitives(filament::Engine* engine, utils::Entity entity, filament::MaterialInstance* inst) {
+        if (!engine || !inst) return;
+        auto& rcm = engine->getRenderableManager();
+        auto instance = rcm.getInstance(entity);
+        if (instance) {
+            size_t count = rcm.getPrimitiveCount(instance);
+            for (size_t i = 0; i < count; ++i) {
+                rcm.setMaterialInstanceAt(instance, i, inst);
+            }
+        }
+    }
+
+    void applyMaterialToGlbAsset(filament::Engine* engine, GlbContext* ctx, filament::MaterialInstance* inst) {
+        if (!engine || !ctx || !ctx->asset || !inst) return;
+        auto& rcm = engine->getRenderableManager();
+        const auto* entities = ctx->asset->getEntities();
+        size_t count = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < count; ++i) {
+            auto instance = rcm.getInstance(entities[i]);
+            if (instance) {
+                size_t primCount = rcm.getPrimitiveCount(instance);
+                for (size_t p = 0; p < primCount; ++p) {
+                    rcm.setMaterialInstanceAt(instance, p, inst);
+                }
+            }
+        }
+    }
+
 } // namespace FilamentBridge

@@ -9,11 +9,33 @@ import FilamentAppKit
 final class DemoSceneController {
     let filamentView: FilamentView
     let model: FilamentModel
+    let outlineModel: FilamentModel
     let pbr: FilamentPBRController
     let camera: FilamentOrbitCamera
 
     private(set) var currentModelName: String?
+    private(set) var currentModelURL: URL?
     private(set) var isAnimationPlaying: Bool = true
+
+    public enum ShadingMode: Int, CaseIterable {
+        case standardPBR = 0
+        case toonCel = 1
+        case toonWithOutline = 2
+        case pbrWithOutline = 3
+
+        var title: String {
+            switch self {
+            case .standardPBR: return "Standard PBR"
+            case .toonCel: return "Toon Cel (Cartoon)"
+            case .toonWithOutline: return "Toon + Inked Outline"
+            case .pbrWithOutline: return "PBR + Inked Outline"
+            }
+        }
+    }
+
+    private(set) var currentShadingMode: ShadingMode = .standardPBR
+    private(set) var toonMaterial: FilamentToonMaterial?
+    private(set) var outlineMaterial: FilamentToonOutlineMaterial?
 
     private var animationTime: Float = 0.0
     private var renderTimer: Timer?
@@ -32,6 +54,7 @@ final class DemoSceneController {
         let engine = filamentView.engine
         pbr = FilamentPBRController(engine: engine)
         model = FilamentModel(engine: engine)
+        outlineModel = FilamentModel(engine: engine)
         camera = FilamentOrbitCamera(engine: engine)
         filamentView.orbitCamera = camera
     }
@@ -53,11 +76,27 @@ final class DemoSceneController {
         do {
             try model.loadGlb(at: asset.url)
             currentModelName = asset.name
+            currentModelURL = asset.url
             print("[AppKitDemo] Loaded model: \(asset.name) from \(asset.url.path)")
+
+            // Also load duplicate geometry into outlineModel
+            try outlineModel.loadGlb(at: asset.url)
+            outlineModel.setPriority(6)
+            model.setPriority(4)
+            ensureToonMaterials()
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setRotation(radiansY: 0.0)
+            if outlineModel.hasAnimations {
+                outlineModel.selectAnimation(at: 0)
+            }
         } catch {
             print("[AppKitDemo] Failed to load \(asset.url.path): \(error)")
             model.unload()
+            outlineModel.unload()
             currentModelName = nil
+            currentModelURL = nil
         }
 
         if model.hasAnimations {
@@ -73,21 +112,171 @@ final class DemoSceneController {
         }
 
         model.setRotation(radiansY: 0.0)
+
+        applyCurrentShadingMode()
+
         onModelStateChanged?()
+    }
+
+    // MARK: - Toon / Cel Shading Controls
+
+    func setShadingMode(_ mode: ShadingMode) {
+        currentShadingMode = mode
+        applyCurrentShadingMode()
+    }
+
+    private func applyCurrentShadingMode() {
+        guard let url = currentModelURL else { return }
+        ensureToonMaterials()
+
+        switch currentShadingMode {
+        case .standardPBR:
+            outlineModel.setVisible(false)
+            do {
+                try model.loadGlb(at: url)
+                model.setRotation(radiansY: 0.0)
+                model.setPriority(4)
+                if model.hasAnimations {
+                    model.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            } catch {
+                print("[AppKitDemo] Failed to reload PBR model: \(error)")
+            }
+
+        case .toonCel:
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+
+        case .toonWithOutline:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .pbrWithOutline:
+            do {
+                try model.loadGlb(at: url)
+                model.setRotation(radiansY: 0.0)
+                model.setPriority(4)
+                if model.hasAnimations {
+                    model.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            } catch {
+                print("[AppKitDemo] Failed to reload PBR model: \(error)")
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+        }
+    }
+
+    private func ensureToonMaterials() {
+        guard toonMaterial == nil || outlineMaterial == nil else { return }
+        let engine = filamentView.engine
+        let candidateDirs = [
+            URL(fileURLWithPath: "Examples/Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "../Resources/Materials", isDirectory: true),
+        ]
+
+        for dir in candidateDirs {
+            let celURL = dir.appendingPathComponent("ToonCel.filamat")
+            let outURL = dir.appendingPathComponent("ToonOutline.filamat")
+            if FileManager.default.fileExists(atPath: celURL.path) && toonMaterial == nil {
+                do {
+                    toonMaterial = try engine.createToonMaterial(from: celURL)
+                    toonMaterial?.syncWithDirectionalLight(direction: (0.2, -1.0, -0.6), color: (1.0, 0.98, 0.95))
+                    print("[AppKitDemo] Loaded ToonCel material from \(celURL.path)")
+                } catch {
+                    print("[AppKitDemo] Error loading ToonCel: \(error)")
+                }
+            }
+            if FileManager.default.fileExists(atPath: outURL.path) && outlineMaterial == nil {
+                do {
+                    outlineMaterial = try engine.createOutlineMaterial(from: outURL)
+                    print("[AppKitDemo] Loaded ToonOutline material from \(outURL.path)")
+                } catch {
+                    print("[AppKitDemo] Error loading ToonOutline: \(error)")
+                }
+            }
+        }
+    }
+
+    func setToonShadowThreshold(_ value: Float) {
+        ensureToonMaterials()
+        toonMaterial?.shadowThreshold = value
+    }
+
+    func setToonHighlightThreshold(_ value: Float) {
+        ensureToonMaterials()
+        toonMaterial?.highlightThreshold = value
+    }
+
+    func setToonEdgeFeather(_ value: Float) {
+        ensureToonMaterials()
+        toonMaterial?.edgeFeather = value
+    }
+
+    func setOutlineThickness(_ value: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineThickness = value
+    }
+
+    func setToonBaseColor(r: Float, g: Float, b: Float) {
+        ensureToonMaterials()
+        toonMaterial?.baseColor = (r, g, b, 1.0)
+    }
+
+    func setOutlineColor(r: Float, g: Float, b: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineColor = (r, g, b, 1.0)
     }
 
     // MARK: - Morph Target controls
 
     func setMorphWeight(at index: Int, weight: Float) {
         model.setMorphWeight(at: index, weight: weight)
+        if outlineModel.isLoaded {
+            outlineModel.setMorphWeight(at: index, weight: weight)
+        }
     }
 
     func setMorphWeight(named name: String, weight: Float) {
         model.setMorphWeight(named: name, weight: weight)
+        if outlineModel.isLoaded {
+            outlineModel.setMorphWeight(named: name, weight: weight)
+        }
     }
 
     func resetMorphWeights() {
         model.resetMorphWeights()
+        if outlineModel.isLoaded {
+            outlineModel.resetMorphWeights()
+        }
     }
 
     // MARK: - Animation & camera controls
@@ -95,6 +284,9 @@ final class DemoSceneController {
     func selectAnimation(at index: Int) {
         guard index >= 0 else { return }
         model.selectAnimation(at: index)
+        if outlineModel.isLoaded {
+            outlineModel.selectAnimation(at: index)
+        }
         animationTime = 0.0
         isAnimationPlaying = model.activeAnimationDuration > 0.001
         print("[AppKitDemo] Selected animation index: \(index), duration: \(model.activeAnimationDuration)s")
@@ -148,6 +340,7 @@ final class DemoSceneController {
         renderTimer?.invalidate()
         renderTimer = nil
         model.unload()
+        outlineModel.unload()
         filamentView.stopRendering()
     }
 
@@ -163,9 +356,15 @@ final class DemoSceneController {
                 animationTime = animationTime.truncatingRemainder(dividingBy: duration)
             }
             model.applyAnimation(time: animationTime)
+            if outlineModel.isLoaded && outlineModel.isVisible {
+                outlineModel.applyAnimation(time: animationTime)
+            }
         }
 
         model.applyMorphWeights()
+        if outlineModel.isLoaded && outlineModel.isVisible {
+            outlineModel.applyMorphWeights()
+        }
 
         camera.update(dt: dt)
 

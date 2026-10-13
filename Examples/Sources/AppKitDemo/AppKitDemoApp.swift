@@ -75,6 +75,31 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         viewItem.submenu = viewMenu
         mainMenu.addItem(viewItem)
 
+        let shadingMenu = NSMenu(title: "Shading")
+        shadingMenu.addItem(NSMenuItem(
+            title: "Standard PBR",
+            action: #selector(pbrShadingMenuClicked),
+            keyEquivalent: "1"
+        ))
+        shadingMenu.addItem(NSMenuItem(
+            title: "Toon Cel (Cartoon)",
+            action: #selector(toonCelShadingMenuClicked),
+            keyEquivalent: "2"
+        ))
+        shadingMenu.addItem(NSMenuItem(
+            title: "Toon + Inked Outline",
+            action: #selector(toonWithOutlineShadingMenuClicked),
+            keyEquivalent: "3"
+        ))
+        shadingMenu.addItem(NSMenuItem(
+            title: "PBR + Inked Outline",
+            action: #selector(pbrWithOutlineShadingMenuClicked),
+            keyEquivalent: "4"
+        ))
+        let shadingItem = NSMenuItem()
+        shadingItem.submenu = shadingMenu
+        mainMenu.addItem(shadingItem)
+
         NSApplication.shared.mainMenu = mainMenu
     }
 
@@ -153,6 +178,26 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
 
     @objc private func toggleOrbitMenuClicked() {
         inspector.toggleOrbitClicked()
+    }
+
+    @objc private func pbrShadingMenuClicked() {
+        scene?.setShadingMode(.standardPBR)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func toonCelShadingMenuClicked() {
+        scene?.setShadingMode(.toonCel)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func toonWithOutlineShadingMenuClicked() {
+        scene?.setShadingMode(.toonWithOutline)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func pbrWithOutlineShadingMenuClicked() {
+        scene?.setShadingMode(.pbrWithOutline)
+        inspector?.syncShadingMode()
     }
 }
 

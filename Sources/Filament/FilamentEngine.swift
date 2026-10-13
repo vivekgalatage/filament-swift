@@ -401,6 +401,34 @@ public final class FilamentEngine: @unchecked Sendable {
         return FilamentBridge.readPixels(eng, ren, x, y, width, height, buffer, bufferSize)
     }
 
+    /// Creates and compiles a custom Cel/Toon Material from binary `.filamat` data.
+    public func createToonMaterial(from filamatData: Data) throws -> FilamentToonMaterial {
+        guard let eng = storage.engine else {
+            throw NSError(domain: "FilamentEngine", code: 10, userInfo: [NSLocalizedDescriptionKey: "Engine is shut down"])
+        }
+        return try FilamentToonMaterial(engine: eng, filamatData: filamatData)
+    }
+
+    /// Creates and compiles a custom Cel/Toon Material from a `.filamat` file URL.
+    public func createToonMaterial(from filamatURL: URL) throws -> FilamentToonMaterial {
+        let data = try Data(contentsOf: filamatURL)
+        return try createToonMaterial(from: data)
+    }
+
+    /// Creates and compiles an Inverted Hull Outline Material from binary `.filamat` data.
+    public func createOutlineMaterial(from filamatData: Data) throws -> FilamentToonOutlineMaterial {
+        guard let eng = storage.engine else {
+            throw NSError(domain: "FilamentEngine", code: 11, userInfo: [NSLocalizedDescriptionKey: "Engine is shut down"])
+        }
+        return try FilamentToonOutlineMaterial(engine: eng, filamatData: filamatData)
+    }
+
+    /// Creates and compiles an Inverted Hull Outline Material from a `.filamat` file URL.
+    public func createOutlineMaterial(from filamatURL: URL) throws -> FilamentToonOutlineMaterial {
+        let data = try Data(contentsOf: filamatURL)
+        return try createOutlineMaterial(from: data)
+    }
+
     private func currentCamera(_ engine: OpaquePointer) -> OpaquePointer? {
         FilamentBridge.getCamera(engine, FilamentBridge.entityFromId(storage.cameraId))
     }
