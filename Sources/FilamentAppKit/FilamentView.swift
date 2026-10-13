@@ -34,7 +34,11 @@ public final class FilamentView: NSView {
     }
 
     public convenience override init(frame frameRect: NSRect) {
-        self.init(frame: frameRect, engine: FilamentEngine(backend: .metal))
+        self.init(frame: frameRect, config: nil)
+    }
+
+    public convenience init(frame frameRect: NSRect, config: FilamentEngine.Config? = nil) {
+        self.init(frame: frameRect, engine: FilamentEngine(backend: .metal, config: config))
     }
 
     @available(*, unavailable)

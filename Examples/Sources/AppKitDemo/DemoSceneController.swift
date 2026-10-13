@@ -67,11 +67,10 @@ final class DemoSceneController {
     var onFrameRendered: ((Double, Bool) -> Void)?
 
     init(frame: NSRect) {
-        filamentView = FilamentView(frame: frame)
+        let engine = FilamentEngine(backend: .metal, config: .largeModelPreset)
+        filamentView = FilamentView(frame: frame, engine: engine)
         filamentView.autoresizingMask = [.width, .height]
         filamentView.isTransparent = false
-
-        let engine = filamentView.engine
         pbr = FilamentPBRController(engine: engine)
         model = FilamentModel(engine: engine)
         outlineModel = FilamentModel(engine: engine)

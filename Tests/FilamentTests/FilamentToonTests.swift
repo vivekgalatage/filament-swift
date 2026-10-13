@@ -173,4 +173,27 @@ final class FilamentToonTests: XCTestCase {
         body.unload()
         outline.unload()
     }
+
+    @MainActor
+    func testEngineCustomArenaConfigAndLargePreset() throws {
+        // Test custom arena sizes (e.g. 128MB driverHandleArenaSizeMB for 300MB assets)
+        var customConfig = FilamentEngine.Config(
+            driverHandleArenaSizeMB: 128,
+            commandBufferSizeMB: 64,
+            perRenderPassArenaSizeMB: 32,
+            minCommandBufferSizeMB: 8,
+            perFrameCommandsSizeMB: 16
+        )
+        let engine = FilamentEngine(backend: .metal, config: customConfig)
+        XCTAssertNotNil(engine.engine)
+
+        let sphereURL = URL(fileURLWithPath: "Resources/MorphSphere.glb")
+        let model = FilamentModel(engine: engine)
+        try model.loadGlb(at: sphereURL)
+        XCTAssertTrue(model.isLoaded)
+
+        // Test largeModelPreset
+        let largeEngine = FilamentEngine(backend: .metal, config: .largeModelPreset)
+        XCTAssertNotNil(largeEngine.engine)
+    }
 }

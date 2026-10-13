@@ -29,8 +29,30 @@
 
 namespace FilamentBridge {
 
-    filament::Engine* createEngine(filament::backend::Backend backend) {
-        return filament::Engine::create(backend);
+    filament::Engine* createEngine(filament::backend::Backend backend, const EngineConfig* config) {
+        if (!config) {
+            return filament::Engine::create(backend);
+        }
+        filament::Engine::Config engineConfig;
+        if (config->driverHandleArenaSizeMB > 0) {
+            engineConfig.driverHandleArenaSizeMB = config->driverHandleArenaSizeMB;
+        }
+        if (config->commandBufferSizeMB > 0) {
+            engineConfig.commandBufferSizeMB = config->commandBufferSizeMB;
+        }
+        if (config->perRenderPassArenaSizeMB > 0) {
+            engineConfig.perRenderPassArenaSizeMB = config->perRenderPassArenaSizeMB;
+        }
+        if (config->minCommandBufferSizeMB > 0) {
+            engineConfig.minCommandBufferSizeMB = config->minCommandBufferSizeMB;
+        }
+        if (config->perFrameCommandsSizeMB > 0) {
+            engineConfig.perFrameCommandsSizeMB = config->perFrameCommandsSizeMB;
+        }
+        return filament::Engine::Builder()
+            .backend(backend)
+            .config(&engineConfig)
+            .build();
     }
 
     void destroyEngine(filament::Engine* engine) {

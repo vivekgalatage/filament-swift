@@ -51,7 +51,17 @@ namespace filament {
 
 namespace FilamentBridge {
 
-    filament::Engine* createEngine(filament::backend::Backend backend = filament::backend::Backend::DEFAULT);
+    struct EngineConfig {
+        uint32_t driverHandleArenaSizeMB = 0;
+        uint32_t commandBufferSizeMB = 0;
+        uint32_t perRenderPassArenaSizeMB = 0;
+        uint32_t minCommandBufferSizeMB = 0;
+        uint32_t perFrameCommandsSizeMB = 0;
+    };
+
+    filament::Engine* createEngine(
+            filament::backend::Backend backend = filament::backend::Backend::DEFAULT,
+            const EngineConfig* config = nullptr);
     void destroyEngine(filament::Engine* engine);
 
     filament::Renderer* createRenderer(filament::Engine* engine);

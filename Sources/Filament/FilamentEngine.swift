@@ -108,16 +108,76 @@ public final class FilamentEngine: @unchecked Sendable {
     /// `true` once `shutDown()` (or `deinit`) has released the Filament objects.
     public var isShutDown: Bool { storage.isShutDown }
 
+    /// Memory arena configuration for Google Filament's engine and graphics backends.
+    public struct Config: Sendable {
+        /// Size in MiB of the backend driver's handle arena.
+        ///
+        /// Backends (OpenGL, Metal, Vulkan) allocate internal handles (textures, buffers, render targets)
+        /// from this arena. If set to 0, Filament uses the platform default:
+        /// - OpenGL: `FILAMENT_OPENGL_HANDLE_ARENA_SIZE_IN_MB` (default 4 MiB)
+        /// - Metal: `FILAMENT_METAL_HANDLE_ARENA_SIZE_IN_MB` (default 8 MiB)
+        /// - Vulkan: `FILAMENT_VULKAN_HANDLE_ARENA_SIZE_IN_MB` (default 8 MiB)
+        ///
+        /// For large scenes or models (e.g., 50MB - 300MB+ GLB files with thousands of primitives/textures),
+        /// setting this to `64` or `128` prevents "HandleAllocator arena is full, using slower system heap" warnings
+        /// and eliminates heap fallback stalls.
+        public var driverHandleArenaSizeMB: UInt32 = 0
+
+        /// Size in MiB of the low-level GPU command buffer (default: 3 MiB).
+        /// Recommended: 32 - 64 MiB for large models.
+        public var commandBufferSizeMB: UInt32 = 0
+
+        /// Size in MiB of the per-render-pass data arena (default: 3 MiB).
+        /// Recommended: 16 - 32 MiB for large models.
+        public var perRenderPassArenaSizeMB: UInt32 = 0
+
+        /// Minimum size in MiB of a low-level command buffer chunk (default: 1 MiB).
+        public var minCommandBufferSizeMB: UInt32 = 0
+
+        /// Size in MiB of the per-frame high-level commands buffer (default: 2 MiB).
+        public var perFrameCommandsSizeMB: UInt32 = 0
+
+        public init(
+            driverHandleArenaSizeMB: UInt32 = 0,
+            commandBufferSizeMB: UInt32 = 0,
+            perRenderPassArenaSizeMB: UInt32 = 0,
+            minCommandBufferSizeMB: UInt32 = 0,
+            perFrameCommandsSizeMB: UInt32 = 0
+        ) {
+            self.driverHandleArenaSizeMB = driverHandleArenaSizeMB
+            self.commandBufferSizeMB = commandBufferSizeMB
+            self.perRenderPassArenaSizeMB = perRenderPassArenaSizeMB
+            self.minCommandBufferSizeMB = minCommandBufferSizeMB
+            self.perFrameCommandsSizeMB = perFrameCommandsSizeMB
+        }
+
+        /// Pre-tuned memory configuration optimized for large 3D models (up to 300MB+ GLB).
+        /// Allocates 64 MiB handle arena, 32 MiB command buffer, and 16 MiB per-render-pass arena.
+        public static var largeModelPreset: Config {
+            Config(
+                driverHandleArenaSizeMB: 64,
+                commandBufferSizeMB: 32,
+                perRenderPassArenaSizeMB: 16,
+                minCommandBufferSizeMB: 4,
+                perFrameCommandsSizeMB: 8
+            )
+        }
+    }
+
     public convenience init() {
         self.init(backend: .default)
     }
 
-    /// Creates an engine with the requested backend.
+    public convenience init(config: Config) {
+        self.init(backend: .default, config: config)
+    }
+
+    /// Creates an engine with the requested backend and optional memory size configuration.
     ///
     /// - Precondition: the backend must be supported on this machine. `Engine::create`
     ///   returns `null` when it is not, which would make every subsequent bridge call a
     ///   null pointer dereference, so this traps with an actionable message instead.
-    public init(backend: FilamentBackend = .default) {
+    public init(backend: FilamentBackend = .default, config: Config? = nil) {
         let b: filament.backend.Backend = switch backend {
         case .default: .DEFAULT
         case .opengl: .OPENGL
@@ -127,7 +187,21 @@ public final class FilamentEngine: @unchecked Sendable {
         case .noop: .NOOP
         }
 
-        guard let created = FilamentBridge.createEngine(b) else {
+        let created: OpaquePointer?
+        if let config {
+            var cConfig = FilamentBridge.EngineConfig(
+                driverHandleArenaSizeMB: config.driverHandleArenaSizeMB,
+                commandBufferSizeMB: config.commandBufferSizeMB,
+                perRenderPassArenaSizeMB: config.perRenderPassArenaSizeMB,
+                minCommandBufferSizeMB: config.minCommandBufferSizeMB,
+                perFrameCommandsSizeMB: config.perFrameCommandsSizeMB
+            )
+            created = FilamentBridge.createEngine(b, &cConfig)
+        } else {
+            created = FilamentBridge.createEngine(b, nil)
+        }
+
+        guard let created else {
             fatalError("""
                 FilamentEngine: could not create a Filament engine with the \(backend) backend. \
                 That backend is unavailable on this machine or in this process \
