@@ -99,6 +99,17 @@ final class ControlPanel {
         addToggle(\.depthOfFieldEnabled, "Depth of field")
 
         addSection("Scene")
+        let orbitCheck = CheckBox()
+        orbitCheck.content = "Auto-orbit camera"
+        orbitCheck.isChecked = host.camera.isAutoOrbiting
+        orbitCheck.checked.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.host.camera.isAutoOrbiting = true }
+        }
+        orbitCheck.unchecked.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.host.camera.isAutoOrbiting = false }
+        }
+        root.children.append(orbitCheck)
+
         let resetCam = Button()
         resetCam.content = "Reset View"
         resetCam.click.addHandler { [weak self] _, _ in

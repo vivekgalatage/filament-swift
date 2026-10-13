@@ -198,7 +198,7 @@ final class DemoHost {
         layoutChildren()
 
         if let renderChild {
-            let view = FilamentWin32View()
+            let view = FilamentWin32View(engine: engine)
             var rect = RECT()
             _ = win32GetClientRect(UnsafeRawPointer(renderChild), &rect)
             view.attach(hwnd: renderChild,
