@@ -21,6 +21,7 @@ final class GTKSceneController {
     private var currentWidth: UInt32 = 1
     private var currentHeight: UInt32 = 1
     private var isAttached = false
+    private var hasPrintedDisplayWarning = false
 
     init(drawingArea: OpaquePointer?) {
         self.drawingArea = drawingArea
@@ -44,23 +45,47 @@ final class GTKSceneController {
         syncSurfaceSize()
 
         guard let display = gdk_display_get_default() else {
-            print("[GTK4Demo] No default GDK display; cannot create a Filament surface.")
+            if !hasPrintedDisplayWarning {
+                hasPrintedDisplayWarning = true
+                print("[GTK4Demo] No default GDK display; cannot create a Filament surface.")
+            }
+            return
+        }
+
+        let getXDisplay = lookupSymbol("gdk_x11_display_get_xdisplay", as: (@convention(c) (OpaquePointer?) -> UnsafeMutableRawPointer?).self)
+            ?? lookupSymbol("gdk_x11_get_xdisplay", as: (@convention(c) (OpaquePointer?) -> UnsafeMutableRawPointer?).self)
+
+        guard let getXDisplay else {
+            if !hasPrintedDisplayWarning {
+                hasPrintedDisplayWarning = true
+                print("[GTK4Demo] This GDK build does not export gdk_x11_display_get_xdisplay.")
+            }
+            return
+        }
+
+        guard let xdisplay = getXDisplay(display) else {
+            if !hasPrintedDisplayWarning {
+                hasPrintedDisplayWarning = true
+                let getDisplayName = lookupSymbol(
+                    "gdk_display_get_name",
+                    as: (@convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?).self
+                )
+                let displayName = getDisplayName?(display).map { String(cString: $0) } ?? "unknown"
+                print("[GTK4Demo] Filament requires an X11 GDK backend on Linux (current display: \(displayName)). Run with GDK_BACKEND=x11.")
+            }
             return
         }
 
         guard
-            let getXDisplay = lookupSymbol("gdk_x11_get_xdisplay", as: (@convention(c) (OpaquePointer?) -> UnsafeMutableRawPointer?).self),
             let getNative = lookupSymbol("gtk_widget_get_native", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self),
             let getSurface = lookupSymbol("gtk_native_get_surface", as: (@convention(c) (OpaquePointer?) -> OpaquePointer?).self),
-            let getXid = lookupSymbol("gdk_x11_surface_get_xid", as: (@convention(c) (OpaquePointer?) -> UInt).self),
-            getXDisplay(display) != nil
+            let getXid = lookupSymbol("gdk_x11_surface_get_xid", as: (@convention(c) (OpaquePointer?) -> UInt).self)
+                ?? lookupSymbol("gdk_x11_window_get_xid", as: (@convention(c) (OpaquePointer?) -> UInt).self)
         else {
-            let getDisplayName = lookupSymbol(
-                "gdk_display_get_name",
-                as: (@convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?).self
-            )
-            let displayName = getDisplayName?(display).map { String(cString: $0) } ?? "unknown"
-            print("[GTK4Demo] Filament requires an X11 GDK backend on Linux (current display: \(displayName)). Run with GDK_BACKEND=x11.")
+            if !hasPrintedDisplayWarning {
+                hasPrintedDisplayWarning = true
+                print("[GTK4Demo] Failed to locate native GTK4/GDK surface resolution symbols.")
+            }
             return
         }
 
@@ -68,21 +93,30 @@ final class GTKSceneController {
             let native = getNative(drawingArea),
             let surface = getSurface(native)
         else {
-            print("[GTK4Demo] Could not resolve the native X11 window handle.")
+            if !hasPrintedDisplayWarning {
+                hasPrintedDisplayWarning = true
+                print("[GTK4Demo] Could not resolve the native X11 window handle.")
+            }
             return
         }
 
         let xid = getXid(surface)
         guard xid != 0, let handle = UnsafeMutableRawPointer(bitPattern: xid) else {
-            print("[GTK4Demo] Native window handle is invalid (xid=\(xid)).")
+            if !hasPrintedDisplayWarning {
+                hasPrintedDisplayWarning = true
+                print("[GTK4Demo] Native window handle is invalid (xid=\(xid)).")
+            }
             return
         }
 
         if hostView.attach(nativeWindow: handle, width: currentWidth, height: currentHeight) {
             isAttached = true
-            print("[GTK4Demo] Filament swap chain attached (xid=\(xid), \(currentWidth)x\(currentHeight)).")
+            print("[GTK4Demo] Filament swap chain attached (xdisplay=\(xdisplay), xid=\(xid), \(currentWidth)x\(currentHeight)).")
         } else {
-            print("[GTK4Demo] Filament failed to create a swap chain for xid=\(xid).")
+            if !hasPrintedDisplayWarning {
+                hasPrintedDisplayWarning = true
+                print("[GTK4Demo] Filament failed to create a swap chain for xid=\(xid).")
+            }
         }
     }
 

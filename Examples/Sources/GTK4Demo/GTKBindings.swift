@@ -214,6 +214,17 @@ let GDK_SHIFT_MASK: UInt32 = 1 << 0
 
 /// Resolves a GTK/GDK/GIO entry point at runtime via `dlsym`.
 func lookupSymbol<T>(_ name: String, as type: T.Type) -> T? {
-    guard let symbol = name.withCString({ dlsym(nil, $0) }) else { return nil }
-    return unsafeBitCast(symbol, to: T.self)
+    if let symbol = name.withCString({ dlsym(nil, $0) }) {
+        return unsafeBitCast(symbol, to: T.self)
+    }
+    #if os(Linux)
+    for libName in ["libgtk-4.so.1", "libgtk-4.so", "libgdk-4.so", "libX11.so.6", "libX11.so"] {
+        if let handle = dlopen(libName, RTLD_LAZY | RTLD_GLOBAL) {
+            if let symbol = name.withCString({ dlsym(handle, $0) }) {
+                return unsafeBitCast(symbol, to: T.self)
+            }
+        }
+    }
+    #endif
+    return nil
 }

@@ -29,7 +29,7 @@ public final class FilamentGTKView {
     }
 
     public convenience init() {
-        self.init(engine: FilamentEngine(backend: .vulkan))
+        self.init(engine: FilamentEngine())
     }
 
     deinit {
