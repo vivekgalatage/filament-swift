@@ -93,24 +93,25 @@ function Find-Python3 {
 }
 
 function Find-WindowsWinmd {
-    $roots = @()
+    $kitRoots = @()
     if ($env:WindowsSdkDir) {
-        $roots += Join-Path $env:WindowsSdkDir "UnionMetadata"
-        $roots += Join-Path $env:WindowsSdkDir "References"
+        $kitRoots += $env:WindowsSdkDir.TrimEnd('\')
     }
-    $roots += @(
-        "${env:ProgramFiles(x86)}\Windows Kits\10\UnionMetadata",
-        "${env:ProgramFiles(x86)}\Windows Kits\10\References",
-        "$env:ProgramFiles\Windows Kits\10\UnionMetadata",
-        "$env:ProgramFiles\Windows Kits\10\References"
+    $kitRoots += @(
+        "${env:ProgramFiles(x86)}\Windows Kits\10",
+        "$env:ProgramFiles\Windows Kits\10"
     )
-    foreach ($root in $roots) {
-        if (-not (Test-Path $root)) { continue }
-        $hit = Get-ChildItem -Path $root -Filter "Windows.winmd" -Recurse -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-        if ($hit) {
-            return $hit.FullName
+    foreach ($kitRoot in ($kitRoots | Select-Object -Unique)) {
+        $unionDir = Join-Path $kitRoot "UnionMetadata"
+        if (-not (Test-Path $unionDir)) { continue }
+        $verDirs = Get-ChildItem -Path $unionDir -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending
+        foreach ($verDir in $verDirs) {
+            $candidate = Join-Path $verDir.FullName "Windows.winmd"
+            if (Test-Path $candidate) {
+                return $candidate
+            }
         }
     }
     return $null

@@ -71,25 +71,36 @@ def newest_versioned_dir(root: Path, prefix: str):
 def find_windows_winmd(explicit: Path | None) -> Path | None:
     if explicit:
         return explicit if explicit.exists() else None
-    # Windows.winmd ships with the Windows SDK; check UnionMetadata and References.
+
+    def parse_ver(name: str) -> tuple[int, ...]:
+        parts = []
+        for piece in name.split("."):
+            if not piece.isdigit():
+                return ()
+            parts.append(int(piece))
+        return tuple(parts)
+
+    kit_roots = []
     env = os.environ.get("WindowsSdkDir")
-    roots = []
     if env:
-        roots.append(Path(env) / "UnionMetadata")
-        roots.append(Path(env) / "References")
-        roots.append(Path(env))
-    roots += [
-        Path(r"C:\Program Files (x86)\Windows Kits\10\UnionMetadata"),
-        Path(r"C:\Program Files (x86)\Windows Kits\10\References"),
-        Path(r"C:\Program Files\Windows Kits\10\UnionMetadata"),
-        Path(r"C:\Program Files\Windows Kits\10\References"),
+        kit_roots.append(Path(env))
+    kit_roots += [
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Windows Kits" / "10",
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Windows Kits" / "10",
     ]
-    for root in roots:
-        if not root.exists():
+    for kit_root in kit_roots:
+        union_dir = kit_root / "UnionMetadata"
+        if not union_dir.is_dir():
             continue
-        hits = sorted(root.rglob("Windows.winmd"), reverse=True)
-        if hits:
-            return hits[0]
+        ver_dirs = sorted(
+            (d for d in union_dir.iterdir() if d.is_dir() and parse_ver(d.name)),
+            key=lambda d: parse_ver(d.name),
+            reverse=True,
+        )
+        for ver_dir in ver_dirs:
+            candidate = ver_dir / "Windows.winmd"
+            if candidate.is_file():
+                return candidate
     return None
 
 
