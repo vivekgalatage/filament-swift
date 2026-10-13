@@ -37,6 +37,8 @@ final class ControlPanel {
     private var modelLabel: TextBlock?
     private var animHeader: TextBlock?
     private var animCombo: ComboBox?
+    private var transparencyToggle: CheckBox?
+    private var autoOrbitToggle: CheckBox?
     private var isSyncingAnimations = false
 
     init(host: DemoHost) {
@@ -99,6 +101,18 @@ final class ControlPanel {
         addToggle(\.depthOfFieldEnabled, "Depth of field")
 
         addSection("Scene")
+        let transparentCheck = CheckBox()
+        transparentCheck.content = "Transparent background"
+        transparentCheck.isChecked = host.isTransparent
+        transparentCheck.checked.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.host.isTransparent = true }
+        }
+        transparentCheck.unchecked.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.host.isTransparent = false }
+        }
+        root.children.append(transparentCheck)
+        self.transparencyToggle = transparentCheck
+
         let orbitCheck = CheckBox()
         orbitCheck.content = "Auto-orbit camera"
         orbitCheck.isChecked = host.camera.isAutoOrbiting
@@ -109,6 +123,7 @@ final class ControlPanel {
             MainActor.assumeIsolated { self?.host.camera.isAutoOrbiting = false }
         }
         root.children.append(orbitCheck)
+        self.autoOrbitToggle = orbitCheck
 
         let resetCam = Button()
         resetCam.content = "Reset View"
@@ -299,6 +314,16 @@ final class ControlPanel {
            let index = FilamentAntiAliasing.allCases.firstIndex(of: settings.antiAliasing) {
             antiAliasingCombo.selectedIndex = Int32(index)
         }
+        syncTransparency()
+        syncAutoOrbit()
+    }
+
+    func syncTransparency() {
+        transparencyToggle?.isChecked = host.isTransparent
+    }
+
+    func syncAutoOrbit() {
+        autoOrbitToggle?.isChecked = host.camera.isAutoOrbiting
     }
 
     private struct SliderBinding {

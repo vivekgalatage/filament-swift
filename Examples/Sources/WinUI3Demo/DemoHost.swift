@@ -22,6 +22,7 @@ private let WM_DESTROY: UInt32 = 0x0002
 private let WM_SIZE: UInt32 = 0x0005
 private let WM_QUIT: UInt32 = 0x0012
 private let WM_ERASEBKGND: UInt32 = 0x0014
+private let WM_KEYDOWN: UInt32 = 0x0100
 private let WM_MOUSEMOVE: UInt32 = 0x0200
 private let WM_LBUTTONDOWN: UInt32 = 0x0201
 private let WM_LBUTTONUP: UInt32 = 0x0202
@@ -49,6 +50,13 @@ private let WS_VISIBLE: UInt32 = 0x1000_0000
 private let WS_CHILD: UInt32 = 0x4000_0000
 private let WS_OVERLAPPEDWINDOW: UInt32 = 0x00CF_0000
 private let kTrue: Int32 = 1
+
+private struct MARGINS {
+    var cxLeftWidth: Int32
+    var cxRightWidth: Int32
+    var cyTopHeight: Int32
+    var cyBottomHeight: Int32
+}
 
 @_silgen_name("MoveWindow")
 private func win32MoveWindow(_ hWnd: UnsafeRawPointer?, _ x: Int32, _ y: Int32, _ nWidth: Int32, _ nHeight: Int32, _ bRepaint: Int32) -> Int32
@@ -89,6 +97,12 @@ private func win32DwmSetWindowAttribute(
     _ dwAttribute: UInt32,
     _ pvAttribute: UnsafeRawPointer,
     _ cbAttribute: UInt32
+) -> Int32
+
+@_silgen_name("DwmExtendFrameIntoClientArea")
+private func win32DwmExtendFrameIntoClientArea(
+    _ hWnd: UnsafeRawPointer?,
+    _ pMarInset: UnsafePointer<MARGINS>?
 ) -> Int32
 
 /// Main-actor-isolated host managing the Win32 windows, XAML island, and Filament scene.
@@ -355,6 +369,28 @@ final class DemoHost {
             let delta = Double(Int16(truncatingIfNeeded: (UInt64(wParam) >> 16) & 0xFFFF)) / 120.0
             camera?.zoom(delta: delta * 1.5)
             return 0
+        case WM_KEYDOWN:
+            let key = Int(wParam)
+            switch key {
+            case 84: // 'T'
+                toggleTransparency()
+                return 0
+            case 82: // 'R'
+                resetCamera()
+                return 0
+            case 79: // 'O'
+                openModelFromDialog()
+                return 0
+            case 32: // VK_SPACE
+                if let camera {
+                    camera.isAutoOrbiting.toggle()
+                    controlPanel?.syncAutoOrbit()
+                }
+                return 0
+            default:
+                break
+            }
+            return DefWindowProcW(hwnd, msg, wParam, lParam)
         default:
             return DefWindowProcW(hwnd, msg, wParam, lParam)
         }
@@ -451,4 +487,36 @@ final class DemoHost {
     func pbrSettings() -> FilamentPBRSettings { pbr.settings }
     func mutatePBR(_ body: (inout FilamentPBRSettings) -> Void) { pbr.mutate(body) }
     func resetPBR() { pbr.reset() }
+
+    // MARK: - Transparency
+
+    var isTransparent: Bool {
+        get { hostView?.isTransparent ?? false }
+        set {
+            hostView?.isTransparent = newValue
+            updateWindowTransparency(newValue)
+            controlPanel?.syncTransparency()
+        }
+    }
+
+    func toggleTransparency() {
+        isTransparent.toggle()
+    }
+
+    private func updateWindowTransparency(_ transparent: Bool) {
+        guard let topHwnd else { return }
+        if transparent {
+            var margins = MARGINS(cxLeftWidth: -1, cxRightWidth: -1, cyTopHeight: -1, cyBottomHeight: -1)
+            _ = win32DwmExtendFrameIntoClientArea(UnsafeRawPointer(topHwnd), &margins)
+            // DWMSBT_TRANSIENTWINDOW = 3 (Acrylic backdrop on Windows 11)
+            var backdrop: UInt32 = 3
+            _ = win32DwmSetWindowAttribute(UnsafeRawPointer(topHwnd), 38, &backdrop, 4)
+        } else {
+            var margins = MARGINS(cxLeftWidth: 0, cxRightWidth: 0, cyTopHeight: 0, cyBottomHeight: 0)
+            _ = win32DwmExtendFrameIntoClientArea(UnsafeRawPointer(topHwnd), &margins)
+            // DWMSBT_NONE = 1
+            var backdrop: UInt32 = 1
+            _ = win32DwmSetWindowAttribute(UnsafeRawPointer(topHwnd), 38, &backdrop, 4)
+        }
+    }
 }
