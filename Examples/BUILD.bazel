@@ -28,11 +28,12 @@ cc_library(
     linkopts = select({
         "@platforms//os:linux": [
             "-lgtk-4",
-            "-lgdk-4",
             "-lgio-2.0",
             "-lgobject-2.0",
             "-lglib-2.0",
             "-lX11",
+            "-lc++",
+            "-lc++abi",
             "-lpthread",
             "-ldl",
         ],

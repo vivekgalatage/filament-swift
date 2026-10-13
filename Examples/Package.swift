@@ -193,11 +193,12 @@ targets.append(.executableTarget(
     swiftSettings: demoSwiftSettings,
     linkerSettings: [
         .linkedLibrary("gtk-4"),
-        .linkedLibrary("gdk-4"),
         .linkedLibrary("gio-2.0"),
         .linkedLibrary("gobject-2.0"),
         .linkedLibrary("glib-2.0"),
         .linkedLibrary("X11"),
+        .linkedLibrary("c++"),
+        .linkedLibrary("c++abi"),
         .linkedLibrary("pthread"),
         .linkedLibrary("dl"),
     ]

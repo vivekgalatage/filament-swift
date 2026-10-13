@@ -142,7 +142,8 @@ cc_library(
         "-lpthread",
         "-ldl",
         "-lX11",
-        "-lstdc++",
+        "-lc++",
+        "-lc++abi",
     ],
 )
 

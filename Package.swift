@@ -154,7 +154,8 @@ let filamentLinkerSettings: [LinkerSetting] = [
 #elseif os(Linux)
 let filamentStaticLibs: [String] = filamentLibraryNames.map { "\(libDir)/lib\($0).a" }
 let filamentLinkerSettings: [LinkerSetting] = [
-    .linkedLibrary("stdc++"),
+    .linkedLibrary("c++"),
+    .linkedLibrary("c++abi"),
     .linkedLibrary("pthread"),
     .linkedLibrary("dl"),
     .unsafeFlags(filamentStaticLibs),
