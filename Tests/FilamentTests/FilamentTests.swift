@@ -205,6 +205,112 @@ final class FilamentTests: XCTestCase {
     }
 
     @MainActor
+    func testMorphTargets() throws {
+        let engine = FilamentEngine(backend: .metal)
+
+        // 1. Model without morph targets
+        let staticModel = FilamentModel(engine: engine)
+        try staticModel.loadGlb(data: TestGLBFixture.staticTriangle())
+        XCTAssertFalse(staticModel.hasMorphTargets)
+        XCTAssertEqual(staticModel.morphTargets.count, 0)
+        XCTAssertEqual(staticModel.getMorphWeight(at: 0), 0.0)
+
+        // 2. Model with morph targets
+        let sphereModel = FilamentModel(engine: engine)
+        let sphereURL = URL(fileURLWithPath: "Resources/MorphSphere.glb")
+        try sphereModel.loadGlb(at: sphereURL)
+        XCTAssertTrue(sphereModel.hasMorphTargets)
+        XCTAssertEqual(sphereModel.morphTargets.count, 4)
+        XCTAssertEqual(
+            sphereModel.morphTargets.map(\.name),
+            ["Squash & Stretch", "Twist", "Spikes", "Bend"]
+        )
+
+        // 3. Initial weights are 0.0
+        for i in 0..<sphereModel.morphTargets.count {
+            XCTAssertEqual(sphereModel.getMorphWeight(at: i), 0.0)
+            XCTAssertEqual(sphereModel.morphTargets[i].weight, 0.0)
+        }
+
+        // 4. Set weight by index
+        sphereModel.setMorphWeight(at: 0, weight: 0.75)
+        XCTAssertEqual(sphereModel.getMorphWeight(at: 0), 0.75)
+        XCTAssertEqual(sphereModel.morphTargets[0].weight, 0.75)
+
+        // 5. Set weight by name
+        sphereModel.setMorphWeight(named: "Twist", weight: 0.9)
+        XCTAssertEqual(sphereModel.getMorphWeight(at: 1), 0.9)
+        XCTAssertEqual(sphereModel.morphTargets[1].weight, 0.9)
+
+        // 6. Backwards compatibility methods (setBlendShape)
+        sphereModel.setBlendShape(index: 2, weight: 0.3)
+        XCTAssertEqual(sphereModel.getMorphWeight(at: 2), 0.3)
+        sphereModel.setBlendShape(name: "Bend", weight: 0.6)
+        XCTAssertEqual(sphereModel.getMorphWeight(at: 3), 0.6)
+
+        // 7. Reset all weights
+        sphereModel.resetMorphWeights()
+        for i in 0..<sphereModel.morphTargets.count {
+            XCTAssertEqual(sphereModel.getMorphWeight(at: i), 0.0)
+            XCTAssertEqual(sphereModel.morphTargets[i].weight, 0.0)
+        }
+
+        // 8. Out of range index is gracefully ignored
+        sphereModel.setMorphWeight(at: -1, weight: 1.0)
+        sphereModel.setMorphWeight(at: 999, weight: 1.0)
+        XCTAssertEqual(sphereModel.getMorphWeight(at: -1), 0.0)
+        XCTAssertEqual(sphereModel.getMorphWeight(at: 999), 0.0)
+
+        // 9. Unload clears morph targets
+        sphereModel.unload()
+        XCTAssertFalse(sphereModel.hasMorphTargets)
+        XCTAssertTrue(sphereModel.morphTargets.isEmpty)
+
+        // 10. Test with furu 6.glb if present on disk
+        let furuURL = URL(fileURLWithPath: "/Users/vivekg/Downloads/furu 6.glb")
+        if FileManager.default.fileExists(atPath: furuURL.path) {
+            let furuModel = FilamentModel(engine: engine)
+            try furuModel.loadGlb(at: furuURL)
+            print("furuModel loaded! morph targets count: \(furuModel.morphTargets.count)")
+            print("furuModel animations count: \(furuModel.animations.count)")
+            print("furuModel activeAnimationIndex: \(String(describing: furuModel.activeAnimationIndex))")
+            
+            XCTAssertFalse(furuModel.hasCustomMorphWeights)
+            XCTAssertEqual(furuModel.morphTargets.count, 96)
+            
+            // Setting a named morph target synchronizes all entities sharing that target
+            furuModel.setMorphWeight(named: "viseme_FF", weight: 0.85)
+            XCTAssertTrue(furuModel.hasCustomMorphWeights)
+            let ffTargets = furuModel.morphTargets.filter { $0.name == "viseme_FF" }
+            XCTAssertEqual(ffTargets.count, 3, "viseme_FF exists on Head, MouthInner, and Teeth")
+            for t in ffTargets {
+                XCTAssertEqual(t.weight, 0.85, accuracy: 1e-4)
+            }
+
+            // Setting by index for a named target also syncs matching submeshes
+            if let firstFF = ffTargets.first {
+                furuModel.setMorphWeight(at: firstFF.id, weight: 0.42)
+                for t in furuModel.morphTargets.filter({ $0.name == "viseme_FF" }) {
+                    XCTAssertEqual(t.weight, 0.42, accuracy: 1e-4)
+                }
+            }
+
+            // applyMorphWeights re-applies stored weights even after applyAnimation
+            furuModel.applyAnimation(time: 0.5)
+            furuModel.applyMorphWeights()
+            XCTAssertTrue(furuModel.hasCustomMorphWeights)
+
+            // Resetting clears all weights
+            furuModel.resetMorphWeights()
+            XCTAssertFalse(furuModel.hasCustomMorphWeights)
+            for t in furuModel.morphTargets {
+                XCTAssertEqual(t.weight, 0.0)
+            }
+            furuModel.unload()
+        }
+    }
+
+    @MainActor
     func testModelRejectsInvalidData() throws {
         let engine = FilamentEngine(backend: .metal)
         let model = FilamentModel(engine: engine)

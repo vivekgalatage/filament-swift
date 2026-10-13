@@ -555,6 +555,44 @@ namespace FilamentBridge {
         }
     }
 
+    void applyMorphWeights(filament::Engine* engine, GlbContext* ctx, const float* weights, size_t count) {
+        if (!engine || !ctx || !ctx->asset || !weights || count == 0) return;
+        auto& rcm = engine->getRenderableManager();
+        size_t running = 0;
+        const auto* entities = ctx->asset->getEntities();
+        size_t entityCount = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < entityCount; ++i) {
+            size_t entityTargets = ctx->asset->getMorphTargetCountAt(entities[i]);
+            if (entityTargets > 0) {
+                auto inst = rcm.getInstance(entities[i]);
+                if (inst) {
+                    size_t toCopy = std::min(entityTargets, (running < count) ? (count - running) : 0);
+                    if (toCopy > 0) {
+                        rcm.setMorphWeights(inst, weights + running, toCopy, 0);
+                    }
+                }
+                running += entityTargets;
+            }
+        }
+    }
+
+    void resetMorphWeights(filament::Engine* engine, GlbContext* ctx) {
+        if (!engine || !ctx || !ctx->asset) return;
+        auto& rcm = engine->getRenderableManager();
+        const auto* entities = ctx->asset->getEntities();
+        size_t count = ctx->asset->getEntityCount();
+        for (size_t i = 0; i < count; ++i) {
+            auto inst = rcm.getInstance(entities[i]);
+            if (inst) {
+                size_t numTargets = rcm.getMorphTargetCount(inst);
+                if (numTargets > 0) {
+                    std::vector<float> zeros(numTargets, 0.0f);
+                    rcm.setMorphWeights(inst, zeros.data(), numTargets, 0);
+                }
+            }
+        }
+    }
+
     void destroyGlbContext(filament::Engine* engine, filament::Scene* scene, GlbContext* ctx) {
         if (!ctx) return;
 

@@ -62,14 +62,32 @@ final class DemoSceneController {
 
         if model.hasAnimations {
             model.selectAnimation(at: 0)
-            isAnimationPlaying = true
+            isAnimationPlaying = model.activeAnimationDuration > 0.001
         } else {
             model.selectAnimation(at: nil)
             isAnimationPlaying = false
         }
 
+        if model.hasMorphTargets {
+            print("[AppKitDemo] Detected \(model.morphTargets.count) morph target(s)")
+        }
+
         model.setRotation(radiansY: 0.0)
         onModelStateChanged?()
+    }
+
+    // MARK: - Morph Target controls
+
+    func setMorphWeight(at index: Int, weight: Float) {
+        model.setMorphWeight(at: index, weight: weight)
+    }
+
+    func setMorphWeight(named name: String, weight: Float) {
+        model.setMorphWeight(named: name, weight: weight)
+    }
+
+    func resetMorphWeights() {
+        model.resetMorphWeights()
     }
 
     // MARK: - Animation & camera controls
@@ -78,7 +96,8 @@ final class DemoSceneController {
         guard index >= 0 else { return }
         model.selectAnimation(at: index)
         animationTime = 0.0
-        print("[AppKitDemo] Selected animation index: \(index)")
+        isAnimationPlaying = model.activeAnimationDuration > 0.001
+        print("[AppKitDemo] Selected animation index: \(index), duration: \(model.activeAnimationDuration)s")
     }
 
     @discardableResult
@@ -145,6 +164,8 @@ final class DemoSceneController {
             }
             model.applyAnimation(time: animationTime)
         }
+
+        model.applyMorphWeights()
 
         camera.update(dt: dt)
 

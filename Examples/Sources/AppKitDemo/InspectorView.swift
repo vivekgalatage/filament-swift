@@ -18,15 +18,30 @@ final class InspectorView: NSObject {
 
     private var inspectorBackdrop: NSVisualEffectView!
     private var modelLabel: NSTextField!
+    private var modelPopup: NSPopUpButton!
+    private var discoveredModels: [ModelAsset] = []
     private var animationContainer: NSStackView!
     private var animationPopup: NSPopUpButton!
     private var playPauseAnimButton: NSButton!
+    private var morphTargetsSection: NSStackView!
+    private var morphTargetsHeader: NSTextField!
+    private var morphTargetsList: NSStackView!
+    private var morphSearchField: NSSearchField?
     private var statusBadge: NSTextField!
     private var transparencyLabel: NSTextField!
 
     private var sliderBindings: [SliderBinding] = []
     private var toggleBindings: [ToggleBinding] = []
     private var popupBindings: [PopupBinding] = []
+    private var morphBindings: [MorphBinding] = []
+
+    private struct MorphBinding {
+        let id: Int
+        let name: String
+        let rowView: NSView
+        let slider: NSSlider
+        let valueLabel: NSTextField
+    }
 
     private struct SliderBinding {
         let key: String
@@ -117,6 +132,7 @@ final class InspectorView: NSObject {
 
         addHeader(to: content)
         addModelSection(to: content)
+        addMorphTargetsSection(to: content)
         addLightingSection(to: content)
         addToneMappingSection(to: content)
         addAntiAliasingSection(to: content)
@@ -145,13 +161,28 @@ final class InspectorView: NSObject {
     private func addModelSection(to stack: NSStackView) {
         stack.addArrangedSubview(makeSectionHeader("Model"))
 
+        let modelRow = NSStackView()
+        modelRow.translatesAutoresizingMaskIntoConstraints = false
+        modelRow.orientation = .horizontal
+        modelRow.alignment = .centerY
+        modelRow.spacing = 8.0
+
+        modelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        modelPopup.target = self
+        modelPopup.action = #selector(onModelPopupChanged(_:))
+        modelPopup.controlSize = .small
+        modelPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        modelRow.addArrangedSubview(modelPopup)
+
+        let openButton = makeButton("Open…", action: #selector(openModelClicked))
+        modelRow.addArrangedSubview(openButton)
+        stack.addArrangedSubview(modelRow)
+
         modelLabel = NSTextField(labelWithString: "No model loaded")
         modelLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
         modelLabel.textColor = .systemCyan
+        modelLabel.lineBreakMode = .byTruncatingMiddle
         stack.addArrangedSubview(modelLabel)
-
-        let openButton = makeButton("Open Model…", action: #selector(openModelClicked))
-        stack.addArrangedSubview(openButton)
 
         animationContainer = NSStackView()
         animationContainer.orientation = .horizontal
@@ -168,6 +199,37 @@ final class InspectorView: NSObject {
         playPauseAnimButton = makeButton("⏸", action: #selector(toggleAnimationPlayClicked))
         animationContainer.addArrangedSubview(playPauseAnimButton)
         stack.addArrangedSubview(animationContainer)
+
+        NSLayoutConstraint.activate([
+            modelRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            modelLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            animationContainer.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+    }
+
+    private func addMorphTargetsSection(to stack: NSStackView) {
+        morphTargetsSection = NSStackView()
+        morphTargetsSection.translatesAutoresizingMaskIntoConstraints = false
+        morphTargetsSection.orientation = .vertical
+        morphTargetsSection.alignment = .leading
+        morphTargetsSection.spacing = 6.0
+
+        morphTargetsHeader = makeSectionHeader("Morph Targets")
+        morphTargetsSection.addArrangedSubview(morphTargetsHeader)
+
+        morphTargetsList = NSStackView()
+        morphTargetsList.translatesAutoresizingMaskIntoConstraints = false
+        morphTargetsList.orientation = .vertical
+        morphTargetsList.alignment = .leading
+        morphTargetsList.spacing = 6.0
+        morphTargetsSection.addArrangedSubview(morphTargetsList)
+
+        stack.addArrangedSubview(morphTargetsSection)
+
+        NSLayoutConstraint.activate([
+            morphTargetsSection.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            morphTargetsList.widthAnchor.constraint(equalTo: morphTargetsSection.widthAnchor),
+        ])
     }
 
     private func addLightingSection(to stack: NSStackView) {
@@ -437,7 +499,20 @@ final class InspectorView: NSObject {
     // MARK: - Synchronization
 
     func syncModelUI() {
-        modelLabel.stringValue = scene.currentModelName ?? "No model loaded"
+        let currentName = scene.currentModelName ?? "No model loaded"
+        modelLabel.stringValue = currentName
+
+        discoveredModels = ModelDiscovery.discoverModels()
+        modelPopup.removeAllItems()
+        for m in discoveredModels {
+            modelPopup.addItem(withTitle: m.name)
+        }
+        if let current = scene.currentModelName, let idx = discoveredModels.firstIndex(where: { $0.name == current }) {
+            modelPopup.selectItem(at: idx)
+        } else if let current = scene.currentModelName {
+            modelPopup.addItem(withTitle: current)
+            modelPopup.selectItem(at: modelPopup.numberOfItems - 1)
+        }
 
         if scene.model.hasAnimations {
             animationContainer.isHidden = false
@@ -451,6 +526,114 @@ final class InspectorView: NSObject {
         } else {
             animationContainer.isHidden = true
             animationPopup.removeAllItems()
+        }
+
+        syncMorphTargetsUI()
+    }
+
+    func syncMorphTargetsUI() {
+        morphBindings.removeAll()
+        morphSearchField = nil
+
+        for view in morphTargetsList.arrangedSubviews {
+            morphTargetsList.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        let targets = scene.model.morphTargets
+        if targets.isEmpty {
+            morphTargetsHeader.stringValue = "MORPH TARGETS"
+            let emptyLabel = NSTextField(labelWithString: "No morph targets in current model")
+            emptyLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+            emptyLabel.textColor = .secondaryLabelColor
+            morphTargetsList.addArrangedSubview(emptyLabel)
+            return
+        }
+
+        morphTargetsHeader.stringValue = "MORPH TARGETS (\(targets.count))"
+
+        let actionBar = NSStackView()
+        actionBar.translatesAutoresizingMaskIntoConstraints = false
+        actionBar.orientation = .horizontal
+        actionBar.alignment = .centerY
+        actionBar.spacing = 8.0
+
+        let resetButton = makeButton("Reset All", action: #selector(resetAllMorphTargetsClicked))
+        actionBar.addArrangedSubview(resetButton)
+
+        if targets.count > 4 {
+            let search = NSSearchField()
+            search.translatesAutoresizingMaskIntoConstraints = false
+            search.placeholderString = "Filter morph targets…"
+            search.controlSize = .small
+            search.target = self
+            search.action = #selector(onMorphSearchChanged(_:))
+            search.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            actionBar.addArrangedSubview(search)
+            morphSearchField = search
+        }
+
+        morphTargetsList.addArrangedSubview(actionBar)
+        NSLayoutConstraint.activate([
+            actionBar.widthAnchor.constraint(equalTo: morphTargetsList.widthAnchor)
+        ])
+
+        for target in targets {
+            let rowContainer = NSStackView()
+            rowContainer.translatesAutoresizingMaskIntoConstraints = false
+            rowContainer.orientation = .vertical
+            rowContainer.alignment = .leading
+            rowContainer.spacing = 2.0
+
+            let headerRow = NSStackView()
+            headerRow.translatesAutoresizingMaskIntoConstraints = false
+            headerRow.orientation = .horizontal
+            headerRow.distribution = .fill
+
+            let nameLabel = NSTextField(labelWithString: target.name)
+            nameLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+            nameLabel.lineBreakMode = .byTruncatingTail
+            nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+            let valueLabel = NSTextField(labelWithString: String(format: "%.2f", target.weight))
+            valueLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+            valueLabel.textColor = .secondaryLabelColor
+            valueLabel.alignment = .right
+            valueLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+            headerRow.addArrangedSubview(nameLabel)
+            headerRow.addArrangedSubview(valueLabel)
+
+            let slider = NSSlider(
+                value: Double(target.weight),
+                minValue: 0.0,
+                maxValue: 1.0,
+                target: self,
+                action: #selector(morphSliderChanged(_:))
+            )
+            slider.translatesAutoresizingMaskIntoConstraints = false
+            slider.controlSize = .small
+            slider.isContinuous = true
+            slider.tag = target.id
+
+            rowContainer.addArrangedSubview(headerRow)
+            rowContainer.addArrangedSubview(slider)
+
+            morphTargetsList.addArrangedSubview(rowContainer)
+
+            NSLayoutConstraint.activate([
+                rowContainer.widthAnchor.constraint(equalTo: morphTargetsList.widthAnchor),
+                headerRow.widthAnchor.constraint(equalTo: rowContainer.widthAnchor),
+                slider.widthAnchor.constraint(equalTo: rowContainer.widthAnchor),
+            ])
+
+            morphBindings.append(MorphBinding(
+                id: target.id,
+                name: target.name,
+                rowView: rowContainer,
+                slider: slider,
+                valueLabel: valueLabel
+            ))
         }
     }
 
@@ -550,6 +733,7 @@ final class InspectorView: NSObject {
 
     @objc private func onAnimationPopupChanged(_ sender: NSPopUpButton) {
         scene.selectAnimation(at: sender.indexOfSelectedItem)
+        playPauseAnimButton.title = scene.isAnimationPlaying ? "⏸" : "▶"
     }
 
     @objc private func toggleAnimationPlayClicked() {
@@ -571,5 +755,45 @@ final class InspectorView: NSObject {
 
     @objc private func resetCameraClicked() {
         scene.resetCamera()
+    }
+
+    @objc private func onModelPopupChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        guard idx >= 0 && idx < discoveredModels.count else { return }
+        scene.loadModel(from: discoveredModels[idx].url)
+    }
+
+    @objc private func morphSliderChanged(_ sender: NSSlider) {
+        guard let binding = morphBindings.first(where: { $0.slider === sender }) else { return }
+        let weight = Float(sender.doubleValue)
+        binding.valueLabel.stringValue = String(format: "%.2f", weight)
+        scene.setMorphWeight(at: binding.id, weight: weight)
+
+        let isNamed = !binding.name.hasPrefix("MorphTarget ")
+        if isNamed {
+            for other in morphBindings where other.name == binding.name && other.slider !== sender {
+                other.slider.doubleValue = Double(weight)
+                other.valueLabel.stringValue = String(format: "%.2f", weight)
+            }
+        }
+    }
+
+    @objc func resetAllMorphTargetsClicked() {
+        scene.resetMorphWeights()
+        for binding in morphBindings {
+            binding.slider.doubleValue = 0.0
+            binding.valueLabel.stringValue = "0.00"
+        }
+    }
+
+    @objc private func onMorphSearchChanged(_ sender: NSSearchField) {
+        let query = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for binding in morphBindings {
+            if query.isEmpty {
+                binding.rowView.isHidden = false
+            } else {
+                binding.rowView.isHidden = !binding.name.lowercased().contains(query)
+            }
+        }
     }
 }

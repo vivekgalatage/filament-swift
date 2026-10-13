@@ -179,6 +179,8 @@ namespace FilamentBridge {
     const char* getMorphTargetName(GlbContext* ctx, size_t index);
     void setMorphWeight(filament::Engine* engine, GlbContext* ctx, size_t index, float weight);
     void setMorphWeightByName(filament::Engine* engine, GlbContext* ctx, const char* name, float weight);
+    void applyMorphWeights(filament::Engine* engine, GlbContext* ctx, const float* weights, size_t count);
+    void resetMorphWeights(filament::Engine* engine, GlbContext* ctx);
     void destroyGlbContext(filament::Engine* engine, filament::Scene* scene, GlbContext* ctx);
 
 } // namespace FilamentBridge

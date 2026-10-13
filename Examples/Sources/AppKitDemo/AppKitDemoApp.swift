@@ -62,6 +62,11 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             keyEquivalent: "r"
         ))
         viewMenu.addItem(NSMenuItem(
+            title: "Reset Morph Targets",
+            action: #selector(resetMorphTargetsMenuClicked),
+            keyEquivalent: "m"
+        ))
+        viewMenu.addItem(NSMenuItem(
             title: "Toggle Orbit",
             action: #selector(toggleOrbitMenuClicked),
             keyEquivalent: " "
@@ -140,6 +145,10 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
 
     @objc private func resetPBRMenuClicked() {
         inspector.resetPBRClicked()
+    }
+
+    @objc private func resetMorphTargetsMenuClicked() {
+        inspector.resetAllMorphTargetsClicked()
     }
 
     @objc private func toggleOrbitMenuClicked() {
