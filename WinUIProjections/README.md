@@ -77,21 +77,19 @@ if the build fails in the control panel.
 
 - Windows 10 1809+ / Windows 11
 - **Swift 6.x for Windows**
+- **Python 3**
 - **Windows 10/11 SDK** (`Windows.winmd`)
-- **Windows App Runtime 1.6** installed on the machine:
-  ```powershell
-  winget install Microsoft.WindowsAppRuntime.1.6
-  ```
 
-`swiftwinrt.exe` (`TheBrowserCompany.SwiftWinRT` `0.6.0`) and the `Microsoft.WindowsAppSDK`
-(`1.6.250602001`) NuGet package are downloaded and extracted automatically by
-`generate_winui_projection.py`.
+Everything else — the prebuilt Filament SDK (`.filament`), `swiftwinrt.exe`
+(`TheBrowserCompany.SwiftWinRT` `0.6.0`), the `Microsoft.WindowsAppSDK` (`1.6.250602001`)
+NuGet package, the Windows App Runtime 1.6 redistributable, and the generated WinRT/WinUI 3
+Swift projections — is bootstrapped automatically by `setup_windows.ps1`.
 
-## Build & Run
+## Bootstrap, Build & Run
 
 ```powershell
-# 1. Generate the WinRT projections (once; re-run when projections.json changes)
-python WinUIProjections\scripts\generate_winui_projection.py
+# 1. Bootstrap Filament, SwiftWinRT, WindowsAppSDK, Windows App Runtime 1.6 & projections
+powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1
 
 # 2. Build + run the WinUI 3 demo (SwiftPM or Bazel)
 swift run --package-path Examples WinUI3Demo

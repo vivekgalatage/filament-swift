@@ -84,7 +84,7 @@ enum WinAppSDKBootstrap {
         let bootstrapPath = findBootstrapDLL() ?? "Microsoft.WindowsAppRuntime.Bootstrap.dll"
         guard let handle = bootstrapPath.withCString(encodedAs: UTF16.self, { LoadLibraryW($0) }) else {
             print("[WinUI3Demo] LoadLibraryW failed for \(bootstrapPath) (error \(GetLastError())). "
-                + "Run `python WinUIProjections/scripts/generate_winui_projection.py` first.")
+                + "Run `.\\setup_windows.ps1` first.")
             return false
         }
         guard let proc = GetProcAddress(handle, "MddBootstrapInitialize2") else {
@@ -95,8 +95,7 @@ enum WinAppSDKBootstrap {
         let hr = unsafeBitCast(proc, to: InitFn.self)(bootstrapVersion, nil, 0, 0)
         if hr < 0 {
             print("[WinUI3Demo] MddBootstrapInitialize2 failed: 0x\(String(UInt32(bitPattern: hr), radix: 16)). "
-                + "Ensure the Windows App Runtime 1.6 is installed: "
-                + "winget install Microsoft.WindowsAppRuntime.1.6")
+                + "Run `.\\setup_windows.ps1` to install Windows App Runtime 1.6.")
             return false
         }
         return true
