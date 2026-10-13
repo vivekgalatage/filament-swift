@@ -301,6 +301,12 @@ public final class FilamentModel {
         applyMaterialInstance(inst)
     }
 
+    /// Applies a depth-only mask material (colorWrite: false, depthWrite: true) to all renderable primitives of this model.
+    public func applyDepthMaskMaterial(_ depthMaskMaterial: FilamentDepthMaskMaterial) {
+        guard let inst = depthMaskMaterial.rawInstance else { return }
+        applyMaterialInstance(inst)
+    }
+
     /// Whether this model's entities are currently added to the Filament scene.
     public private(set) var isVisible: Bool = true
 

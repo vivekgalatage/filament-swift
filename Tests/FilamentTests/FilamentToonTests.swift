@@ -64,6 +64,26 @@ final class FilamentToonTests: XCTestCase {
     }
 
     @MainActor
+    func testDepthMaskMaterialLifecycle() throws {
+        let engine = FilamentEngine(backend: .metal)
+        let maskURL = URL(fileURLWithPath: "Resources/Materials/DepthMask.filamat")
+        guard FileManager.default.fileExists(atPath: maskURL.path) else {
+            XCTFail("DepthMask.filamat does not exist at Resources/Materials/DepthMask.filamat")
+            return
+        }
+
+        let depthMask = try engine.createDepthMaskMaterial(from: maskURL)
+        XCTAssertNotNil(depthMask.rawMaterial)
+        XCTAssertNotNil(depthMask.rawInstance)
+
+        let model = FilamentModel(engine: engine)
+        let sphereURL = URL(fileURLWithPath: "Resources/MorphSphere.glb")
+        try model.loadGlb(at: sphereURL)
+        model.applyDepthMaskMaterial(depthMask)
+        model.unload()
+    }
+
+    @MainActor
     func testApplyToonMaterialToGlbModel() throws {
         let engine = FilamentEngine(backend: .metal)
         let celURL = URL(fileURLWithPath: "Resources/Materials/ToonCel.filamat")

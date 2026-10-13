@@ -96,6 +96,11 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             action: #selector(pbrWithOutlineShadingMenuClicked),
             keyEquivalent: "4"
         ))
+        shadingMenu.addItem(NSMenuItem(
+            title: "Outline Only (Transparent Body)",
+            action: #selector(outlineOnlyShadingMenuClicked),
+            keyEquivalent: "5"
+        ))
         let shadingItem = NSMenuItem()
         shadingItem.submenu = shadingMenu
         mainMenu.addItem(shadingItem)
@@ -197,6 +202,11 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
 
     @objc private func pbrWithOutlineShadingMenuClicked() {
         scene?.setShadingMode(.pbrWithOutline)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func outlineOnlyShadingMenuClicked() {
+        scene?.setShadingMode(.outlineOnly)
         inspector?.syncShadingMode()
     }
 }

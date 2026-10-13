@@ -22,6 +22,7 @@ final class DemoSceneController {
         case toonCel = 1
         case toonWithOutline = 2
         case pbrWithOutline = 3
+        case outlineOnly = 4
 
         var title: String {
             switch self {
@@ -29,13 +30,32 @@ final class DemoSceneController {
             case .toonCel: return "Toon Cel (Cartoon)"
             case .toonWithOutline: return "Toon + Inked Outline"
             case .pbrWithOutline: return "PBR + Inked Outline"
+            case .outlineOnly: return "Outline Only (Transparent Body)"
+            }
+        }
+    }
+
+    public enum CanvasBackground: Int, CaseIterable {
+        case darkStudio = 0
+        case paperWhite = 1
+        case blueprint = 2
+        case neutralGray = 3
+
+        var title: String {
+            switch self {
+            case .darkStudio: return "Dark Studio (Default)"
+            case .paperWhite: return "Paper White (Print)"
+            case .blueprint: return "Blueprint Blue"
+            case .neutralGray: return "Neutral Gray"
             }
         }
     }
 
     private(set) var currentShadingMode: ShadingMode = .standardPBR
+    private(set) var currentCanvasBackground: CanvasBackground = .darkStudio
     private(set) var toonMaterial: FilamentToonMaterial?
     private(set) var outlineMaterial: FilamentToonOutlineMaterial?
+    private(set) var depthMaskMaterial: FilamentDepthMaskMaterial?
 
     private var animationTime: Float = 0.0
     private var renderTimer: Timer?
@@ -191,11 +211,30 @@ final class DemoSceneController {
             }
             outlineModel.setPriority(6)
             outlineModel.setVisible(true)
+
+        case .outlineOnly:
+            model.setPriority(4)
+            if let mask = depthMaskMaterial {
+                model.applyDepthMaskMaterial(mask)
+            }
+            model.setVisible(true)
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
         }
     }
 
     private func ensureToonMaterials() {
-        guard toonMaterial == nil || outlineMaterial == nil else { return }
+        guard toonMaterial == nil || outlineMaterial == nil || depthMaskMaterial == nil else { return }
         let engine = filamentView.engine
         let candidateDirs = [
             URL(fileURLWithPath: "Examples/Resources/Materials", isDirectory: true),
@@ -206,6 +245,7 @@ final class DemoSceneController {
         for dir in candidateDirs {
             let celURL = dir.appendingPathComponent("ToonCel.filamat")
             let outURL = dir.appendingPathComponent("ToonOutline.filamat")
+            let maskURL = dir.appendingPathComponent("DepthMask.filamat")
             if FileManager.default.fileExists(atPath: celURL.path) && toonMaterial == nil {
                 do {
                     toonMaterial = try engine.createToonMaterial(from: celURL)
@@ -223,6 +263,28 @@ final class DemoSceneController {
                     print("[AppKitDemo] Error loading ToonOutline: \(error)")
                 }
             }
+            if FileManager.default.fileExists(atPath: maskURL.path) && depthMaskMaterial == nil {
+                do {
+                    depthMaskMaterial = try engine.createDepthMaskMaterial(from: maskURL)
+                    print("[AppKitDemo] Loaded DepthMask material from \(maskURL.path)")
+                } catch {
+                    print("[AppKitDemo] Error loading DepthMask: \(error)")
+                }
+            }
+        }
+    }
+
+    func setCanvasBackground(_ bg: CanvasBackground) {
+        currentCanvasBackground = bg
+        switch bg {
+        case .darkStudio:
+            filamentView.engine.setClearColor(r: 0.12, g: 0.13, b: 0.16, a: 1.0)
+        case .paperWhite:
+            filamentView.engine.setClearColor(r: 0.98, g: 0.98, b: 0.98, a: 1.0)
+        case .blueprint:
+            filamentView.engine.setClearColor(r: 0.10, g: 0.22, b: 0.38, a: 1.0)
+        case .neutralGray:
+            filamentView.engine.setClearColor(r: 0.50, g: 0.50, b: 0.50, a: 1.0)
         }
     }
 

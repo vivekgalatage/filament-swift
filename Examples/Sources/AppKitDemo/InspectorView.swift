@@ -254,6 +254,13 @@ final class InspectorView: NSObject {
                   format: { String(format: "%.1f px", $0) }) { [weak self] val in
             self?.scene.setOutlineThickness(Float(val))
         }
+
+        addPopup(to: stack, title: "Canvas",
+                 items: DemoSceneController.CanvasBackground.allCases.map(\.title),
+                 selected: scene.currentCanvasBackground.rawValue) { [weak self] index in
+            guard let bg = DemoSceneController.CanvasBackground(rawValue: index) else { return }
+            self?.scene.setCanvasBackground(bg)
+        }
     }
 
     private func addMorphTargetsSection(to stack: NSStackView) {

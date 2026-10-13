@@ -1,0 +1,17 @@
+material {
+    name : DepthMask,
+    shadingModel : unlit,
+    culling : back,
+    colorWrite : false,
+    depthWrite : true,
+    requires : [
+        position
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0);
+    }
+}

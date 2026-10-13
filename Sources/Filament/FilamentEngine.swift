@@ -429,6 +429,20 @@ public final class FilamentEngine: @unchecked Sendable {
         return try createOutlineMaterial(from: data)
     }
 
+    /// Creates and compiles a Depth-Only Mask Material (colorWrite: false) from binary `.filamat` data.
+    public func createDepthMaskMaterial(from filamatData: Data) throws -> FilamentDepthMaskMaterial {
+        guard let eng = storage.engine else {
+            throw NSError(domain: "FilamentEngine", code: 12, userInfo: [NSLocalizedDescriptionKey: "Engine is shut down"])
+        }
+        return try FilamentDepthMaskMaterial(engine: eng, filamatData: filamatData)
+    }
+
+    /// Creates and compiles a Depth-Only Mask Material (colorWrite: false) from a `.filamat` file URL.
+    public func createDepthMaskMaterial(from filamatURL: URL) throws -> FilamentDepthMaskMaterial {
+        let data = try Data(contentsOf: filamatURL)
+        return try createDepthMaskMaterial(from: data)
+    }
+
     private func currentCamera(_ engine: OpaquePointer) -> OpaquePointer? {
         FilamentBridge.getCamera(engine, FilamentBridge.entityFromId(storage.cameraId))
     }
