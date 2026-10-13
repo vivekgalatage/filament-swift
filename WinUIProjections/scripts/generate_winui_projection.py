@@ -175,10 +175,17 @@ def main() -> int:
         return 1
     print(f"Using Windows App SDK: {wasdk_dir}")
 
+    webview2_dir = next(
+        (d for root in search_dirs if root for d in [newest_versioned_dir(root, "Microsoft.Web.WebView2")] if d),
+        None,
+    )
+
     # uap10.0 holds Microsoft.UI.Xaml et al; uap10.0.18362 holds the SDK contracts the
-    # projections reference.
+    # projections reference; Microsoft.Web.WebView2 holds CoreWebView2 referenced by Xaml.
     winmd_inputs = sorted(str(p) for p in wasdk_dir.glob("lib/uap10.0/*.winmd"))
     winmd_inputs += sorted(str(p) for p in wasdk_dir.glob("lib/uap10.0.18362/*.winmd"))
+    if webview2_dir is not None:
+        winmd_inputs += sorted(str(p) for p in webview2_dir.glob("lib/*.winmd"))
     if not winmd_inputs:
         print(f"error: no winmd under {wasdk_dir}/lib/uap10.0. The package layout changed "
               "(swift-winrt #263); pin an older Windows App SDK in projections.json.",

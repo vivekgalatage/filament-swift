@@ -25,6 +25,8 @@ $SwiftWinRtPackage = "TheBrowserCompany.SwiftWinRT"
 $SwiftWinRtVersion = "0.6.0"
 $WasdkPackage = "Microsoft.WindowsAppSDK"
 $WasdkVersion = "1.6.250602001"
+$WebView2Package = "Microsoft.Web.WebView2"
+$WebView2Version = "1.0.2651.64"
 $WasdkRuntimeInstallerUrl = "https://aka.ms/windowsappsdk/1.6/latest/windowsappruntimeinstall-x64.exe"
 
 function Write-Header([string]$title) {
@@ -199,9 +201,9 @@ if ((Test-Path $swiftWinRtExe) -and -not $Force) {
 }
 
 # -----------------------------------------------------------------------------
-# 4. Bootstrap Microsoft.WindowsAppSDK NuGet Package (1.6.250602001)
+# 4. Bootstrap Microsoft.WindowsAppSDK & Microsoft.Web.WebView2 NuGet Packages
 # -----------------------------------------------------------------------------
-Write-Step "4/6" "Bootstrapping $WasdkPackage ($WasdkVersion)..."
+Write-Step "4/6" "Bootstrapping $WasdkPackage ($WasdkVersion) and $WebView2Package ($WebView2Version)..."
 
 $packagesRoot = Join-Path $RepoRoot "WinUIProjections\_packages"
 $wasdkDir = Join-Path $packagesRoot "$WasdkPackage.$WasdkVersion"
@@ -223,6 +225,27 @@ if ((Test-Path $wasdkMarker) -and -not $Force) {
     Expand-Archive -Path $nupkgZip -DestinationPath $wasdkDir -Force
     Remove-Item $nupkgZip -Force -ErrorAction SilentlyContinue
     Write-Pass "Extracted $WasdkPackage.$WasdkVersion to $wasdkDir"
+}
+
+$webview2Dir = Join-Path $packagesRoot "$WebView2Package.$WebView2Version"
+$webview2Marker = Join-Path $webview2Dir "lib\Microsoft.Web.WebView2.Core.winmd"
+
+if ((Test-Path $webview2Marker) -and -not $Force) {
+    Write-Pass "$WebView2Package.$WebView2Version already present at $webview2Dir"
+} else {
+    if (Test-Path $webview2Dir) {
+        Remove-Item $webview2Dir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $webview2Dir -Force | Out-Null
+
+    $nugetUrl = "https://www.nuget.org/api/v2/package/$WebView2Package/$WebView2Version"
+    $nupkgZip = Join-Path $env:TEMP "$WebView2Package.$WebView2Version.zip"
+    Get-FileDownload -Url $nugetUrl -OutFile $nupkgZip
+
+    Write-Info "Extracting $WebView2Package.$WebView2Version ..."
+    Expand-Archive -Path $nupkgZip -DestinationPath $webview2Dir -Force
+    Remove-Item $nupkgZip -Force -ErrorAction SilentlyContinue
+    Write-Pass "Extracted $WebView2Package.$WebView2Version to $webview2Dir"
 }
 
 # -----------------------------------------------------------------------------
