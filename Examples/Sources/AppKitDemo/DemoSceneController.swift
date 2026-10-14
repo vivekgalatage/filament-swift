@@ -631,16 +631,18 @@ final class DemoSceneController {
     // MARK: - Demo Mode (Product Video Reel)
 
     public enum DemoCameraMove: Sendable {
-        /// Subtle organic breathing / floating motion (gentle harmonic sway and slow dolly)
-        case subtleBreathing
-        /// Slow cinematic dolly push-in (dramatic zoom towards details)
-        case slowDollyIn(speed: Double)
-        /// Slow cinematic pull-back (revealing the full silhouette)
-        case slowDollyOut(speed: Double)
-        /// Slow orbital drift along azimuth (smooth cinematic pan around the model)
-        case slowPan(speed: Double)
-        /// Dynamic arc sweep (azimuth and elevation curved sweep)
-        case arcSweep(speed: Double)
+        /// Crash zoom: High-velocity spring slam-in from startDistance to targetDistance
+        case crashZoomIn(startDistance: Double, targetDistance: Double)
+        /// Whip-pan snap: Rapid angular whip rotation that snaps into the hero angle with spring overshoot
+        case whipPanSnap(startOffsetAzimuth: Double, startDistance: Double, targetDistance: Double)
+        /// True Vertigo Dolly Zoom: Camera dollies in/out while dynamically counter-warping FOV
+        case vertigoDollyZoom(fromDistance: Double, toDistance: Double, fromFov: Double, toFov: Double)
+        /// Macro Punch: Crash zooms into extreme close-up detail, holds, then snappy pull-back to wide
+        case macroPunch(macroDistance: Double, returnDistance: Double)
+        /// Kinetic Arc Sweep: High-speed curved sweep around the model with dynamic elevation
+        case dynamicArc(speed: Double, heightSway: Double)
+        /// Elastic Snap: Instant scale punch with spring bounce
+        case elasticSnap(punchDistance: Double, settleDistance: Double)
     }
 
     public struct DemoStep: Sendable {
@@ -664,10 +666,11 @@ final class DemoSceneController {
 
     // Dynamic camera choreography
     private var stepStartTime: Double = 0.0
+    private var currentStepDuration: Double = 2.0
     private var currentStepBaseAzimuth: Double = 0.0
     private var currentStepBaseElevation: Double = 0.12
     private var currentStepBaseDistance: Double = 10.5
-    private var currentCameraMove: DemoCameraMove = .subtleBreathing
+    private var currentCameraMove: DemoCameraMove = .crashZoomIn(startDistance: 13.5, targetDistance: 9.2)
 
     // Saved state for restoring when demo mode exits
     private var savedTransparency: Bool = false
@@ -694,11 +697,11 @@ final class DemoSceneController {
             outlineMode: nil,
             outlineSpeed: nil,
             halftonePreset: nil,
-            duration: 2.8,
+            duration: 2.2,
             initialAzimuth: 0.0,
             initialElevation: 0.12,
             initialDistance: 10.5,
-            cameraMove: .subtleBreathing
+            cameraMove: .crashZoomIn(startDistance: 13.5, targetDistance: 9.2)
         ),
         DemoStep(
             title: "Toon Cel (Cartoon)",
@@ -707,11 +710,11 @@ final class DemoSceneController {
             outlineMode: nil,
             outlineSpeed: nil,
             halftonePreset: nil,
-            duration: 1.8,
-            initialAzimuth: 0.45,
-            initialElevation: 0.16,
-            initialDistance: 9.4,
-            cameraMove: .slowPan(speed: 0.14)
+            duration: 1.4,
+            initialAzimuth: 0.48,
+            initialElevation: 0.18,
+            initialDistance: 8.2,
+            cameraMove: .whipPanSnap(startOffsetAzimuth: 0.70, startDistance: 10.8, targetDistance: 8.0)
         ),
         DemoStep(
             title: "Toon + Inked Outline",
@@ -720,11 +723,11 @@ final class DemoSceneController {
             outlineMode: .solid,
             outlineSpeed: 0.0,
             halftonePreset: nil,
-            duration: 2.4,
-            initialAzimuth: -0.50,
-            initialElevation: -0.06,
-            initialDistance: 8.8,
-            cameraMove: .slowDollyIn(speed: 0.35)
+            duration: 1.8,
+            initialAzimuth: -0.52,
+            initialElevation: -0.08,
+            initialDistance: 7.6,
+            cameraMove: .crashZoomIn(startDistance: 11.2, targetDistance: 7.2)
         ),
         DemoStep(
             title: "PBR + Inked Outline",
@@ -733,11 +736,11 @@ final class DemoSceneController {
             outlineMode: .solid,
             outlineSpeed: 0.0,
             halftonePreset: nil,
-            duration: 1.9,
-            initialAzimuth: 0.75,
-            initialElevation: 0.20,
-            initialDistance: 9.6,
-            cameraMove: .arcSweep(speed: 0.12)
+            duration: 1.3,
+            initialAzimuth: 0.78,
+            initialElevation: 0.26,
+            initialDistance: 8.6,
+            cameraMove: .elasticSnap(punchDistance: 6.4, settleDistance: 8.4)
         ),
         DemoStep(
             title: "Outline Only (Transparent Body)",
@@ -746,11 +749,11 @@ final class DemoSceneController {
             outlineMode: .solid,
             outlineSpeed: 0.0,
             halftonePreset: nil,
-            duration: 2.6,
-            initialAzimuth: 0.15,
-            initialElevation: 0.04,
-            initialDistance: 8.2,
-            cameraMove: .slowDollyIn(speed: 0.30)
+            duration: 2.4,
+            initialAzimuth: 0.18,
+            initialElevation: 0.05,
+            initialDistance: 4.8,
+            cameraMove: .macroPunch(macroDistance: 4.5, returnDistance: 7.6)
         ),
         DemoStep(
             title: "Comic Halftone (Spider-Verse Pop-Art)",
@@ -759,11 +762,11 @@ final class DemoSceneController {
             outlineMode: nil,
             outlineSpeed: nil,
             halftonePreset: FilamentToonMaterial.spiderVersePreset,
-            duration: 2.5,
-            initialAzimuth: -0.38,
-            initialElevation: 0.14,
-            initialDistance: 9.6,
-            cameraMove: .subtleBreathing
+            duration: 2.2,
+            initialAzimuth: -0.42,
+            initialElevation: 0.16,
+            initialDistance: 9.8,
+            cameraMove: .vertigoDollyZoom(fromDistance: 10.2, toDistance: 5.8, fromFov: 32.0, toFov: 62.0)
         ),
         DemoStep(
             title: "Manga Screentone + Outline",
@@ -772,24 +775,24 @@ final class DemoSceneController {
             outlineMode: .solid,
             outlineSpeed: 0.0,
             halftonePreset: FilamentToonMaterial.mangaScreentonePreset,
-            duration: 1.9,
-            initialAzimuth: 0.60,
-            initialElevation: 0.28,
-            initialDistance: 9.0,
-            cameraMove: .slowPan(speed: -0.16)
+            duration: 1.4,
+            initialAzimuth: 0.65,
+            initialElevation: 0.32,
+            initialDistance: 7.4,
+            cameraMove: .whipPanSnap(startOffsetAzimuth: -0.65, startDistance: 10.5, targetDistance: 7.2)
         ),
         DemoStep(
             title: "VIBGYOR Rainbow Spectrum",
             subtitle: "Dynamic Multi-Color Animated Rainbow Outline",
             mode: .toonWithOutline,
             outlineMode: .rainbow,
-            outlineSpeed: 1.5,
+            outlineSpeed: 1.8,
             halftonePreset: nil,
-            duration: 3.0,
-            initialAzimuth: -0.72,
-            initialElevation: 0.10,
-            initialDistance: 9.2,
-            cameraMove: .slowDollyOut(speed: 0.25)
+            duration: 2.8,
+            initialAzimuth: -0.75,
+            initialElevation: 0.12,
+            initialDistance: 8.5,
+            cameraMove: .crashZoomIn(startDistance: 12.0, targetDistance: 8.2)
         ),
         DemoStep(
             title: "Random Multi-Color Facets",
@@ -798,13 +801,28 @@ final class DemoSceneController {
             outlineMode: .randomFacets,
             outlineSpeed: 0.0,
             halftonePreset: nil,
-            duration: 2.2,
-            initialAzimuth: 0.35,
-            initialElevation: 0.18,
-            initialDistance: 9.5,
-            cameraMove: .arcSweep(speed: 0.18)
+            duration: 1.8,
+            initialAzimuth: 0.38,
+            initialElevation: 0.20,
+            initialDistance: 8.8,
+            cameraMove: .dynamicArc(speed: 0.35, heightSway: 0.08)
         ),
     ]
+
+    private static func springEaseOut(_ t: Double) -> Double {
+        let x = min(max(t, 0.0), 1.0)
+        return 1.0 - pow(2.0, -10.0 * x) * cos(x * .pi * 2.5)
+    }
+
+    private static func easeOutExpo(_ t: Double) -> Double {
+        let x = min(max(t, 0.0), 1.0)
+        return x == 1.0 ? 1.0 : 1.0 - pow(2.0, -10.0 * x)
+    }
+
+    private static func smoothHermite(_ t: Double) -> Double {
+        let x = min(max(t, 0.0), 1.0)
+        return x * x * (3.0 - 2.0 * x)
+    }
 
     @discardableResult
     func toggleDemoTurntable() -> Bool {
@@ -845,16 +863,17 @@ final class DemoSceneController {
         savedAnimationPlaying = isAnimationPlaying
 
         // 1. Center model at ~30% size in full window
-        camera.setPose(azimuth: 0.0, elevation: 0.12, distance: 10.5, target: (0.0, 0.0, 0.0))
+        camera.setPose(azimuth: 0.0, elevation: 0.12, distance: 13.5, target: (0.0, 0.0, 0.0))
         isDemoTurntableEnabled = false
         camera.isAutoOrbiting = false
         camera.lockAutoOrbit = false
 
         stepStartTime = CACurrentMediaTime()
+        currentStepDuration = 2.2
         currentStepBaseAzimuth = 0.0
         currentStepBaseElevation = 0.12
         currentStepBaseDistance = 10.5
-        currentCameraMove = .subtleBreathing
+        currentCameraMove = .crashZoomIn(startDistance: 13.5, targetDistance: 9.2)
 
         if model.hasAnimations {
             isAnimationPlaying = true
@@ -896,13 +915,18 @@ final class DemoSceneController {
         window.backgroundColor = .clear
         filamentView.engine.setClearColor(r: 0.0, g: 0.0, b: 0.0, a: 0.0)
 
+        // Trigger crash zoom slam on alpha drop
+        stepStartTime = CACurrentMediaTime()
+        currentStepDuration = 1.2
+        currentCameraMove = .crashZoomIn(startDistance: 12.0, targetDistance: 8.8)
+
         let total = Self.demoSteps.count
         onDemoModeStepChanged?(0, total, "Standard PBR", "Per-Pixel Alpha Transparent Mode Active")
 
-        // Hold initial alpha step for remaining 1.8s, then advance to step 1
+        // Hold initial alpha step for 1.2s, then advance to step 1
         demoStepIndex = 1
         demoTimer?.invalidate()
-        let stepTimer = Timer.scheduledTimer(withTimeInterval: 1.8, repeats: false) { [weak self, weak window] _ in
+        let stepTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 guard let self, let window, self.isDemoModeActive else { return }
                 self.advanceDemoStep(window: window)
@@ -931,6 +955,7 @@ final class DemoSceneController {
         }
 
         stepStartTime = CACurrentMediaTime()
+        currentStepDuration = step.duration
         currentStepBaseAzimuth = step.initialAzimuth
         currentStepBaseElevation = step.initialElevation
         currentStepBaseDistance = step.initialDistance
@@ -970,54 +995,118 @@ final class DemoSceneController {
     private func updateDemoCamera(dt: Float) {
         guard isDemoModeActive else { return }
 
+        let elapsed = CACurrentMediaTime() - stepStartTime
+        let duration = max(0.5, currentStepDuration)
+        let normalizedProgress = min(1.0, elapsed / duration)
+
+        // Subtle outline pulse on cut impact (first 0.15s)
+        if elapsed < 0.15 {
+            let pulseProgress = elapsed / 0.15
+            let pulseScale = Float(1.0 + sin(pulseProgress * .pi) * 0.4)
+            outlineMaterial?.outlineThickness = 0.02 * pulseScale
+        } else {
+            outlineMaterial?.outlineThickness = 0.02
+        }
+
         if isDemoTurntableEnabled {
             // Turntable is active (R key pressed): auto-orbit handles 360 spin
             return
         }
 
-        let elapsed = CACurrentMediaTime() - stepStartTime
+        let aspect: Double
+        if filamentView.bounds.height > 0 {
+            aspect = Double(filamentView.bounds.width / filamentView.bounds.height)
+        } else {
+            aspect = 1.77
+        }
 
         switch currentCameraMove {
-        case .subtleBreathing:
-            let breath = sin(elapsed * 1.5) * 0.025
-            let dolly = sin(elapsed * 1.1) * 0.12
+        case .crashZoomIn(let startDist, let targetDist):
+            // Fast spring rush in first 0.35s, then subtle breathing
+            let spring = Self.springEaseOut(min(1.0, elapsed / 0.38))
+            let curDist = startDist + (targetDist - startDist) * spring
+            let breath = sin(elapsed * 2.0) * 0.015
             camera.setPose(
                 azimuth: currentStepBaseAzimuth + breath,
-                elevation: currentStepBaseElevation + breath * 0.4,
-                distance: currentStepBaseDistance + dolly
-            )
-
-        case .slowDollyIn(let speed):
-            let curDist = max(7.0, currentStepBaseDistance - elapsed * speed)
-            let sway = sin(elapsed * 0.8) * 0.015
-            camera.setPose(
-                azimuth: currentStepBaseAzimuth + sway,
+                elevation: currentStepBaseElevation,
                 distance: curDist
             )
+            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
-        case .slowDollyOut(let speed):
-            let curDist = min(11.5, currentStepBaseDistance + elapsed * speed)
-            let sway = sin(elapsed * 0.8) * 0.015
+        case .whipPanSnap(let startOffsetAz, let startDist, let targetDist):
+            // Whip pan rotation and crash punch in first 0.30s
+            let spring = Self.springEaseOut(min(1.0, elapsed / 0.35))
+            let curAz = (currentStepBaseAzimuth + startOffsetAz) - startOffsetAz * spring
+            let curDist = startDist + (targetDist - startDist) * spring
+            let drift = elapsed > 0.35 ? (elapsed - 0.35) * 0.08 : 0.0
             camera.setPose(
-                azimuth: currentStepBaseAzimuth + sway,
+                azimuth: curAz + drift,
+                elevation: currentStepBaseElevation,
                 distance: curDist
             )
+            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
-        case .slowPan(let speed):
+        case .vertigoDollyZoom(let fromDist, let toDist, let fromFov, let toFov):
+            // True Dolly Zoom: Dolly in/out while dynamically counter-warping FOV
+            let hermite = Self.smoothHermite(normalizedProgress)
+            let curDist = fromDist + (toDist - fromDist) * hermite
+            let curFov = fromFov + (toFov - fromFov) * hermite
+            let sway = sin(elapsed * 1.5) * 0.02
+            camera.setPose(
+                azimuth: currentStepBaseAzimuth + sway,
+                elevation: currentStepBaseElevation,
+                distance: curDist
+            )
+            filamentView.engine.setCameraProjection(fovInDegrees: curFov, aspect: aspect)
+
+        case .macroPunch(let macroDist, let returnDist):
+            // Crash into macro detail, hold, then snap back
+            let curDist: Double
+            if normalizedProgress < 0.40 {
+                // Slam into macro
+                let spring = Self.springEaseOut(normalizedProgress / 0.40)
+                curDist = currentStepBaseDistance + (macroDist - currentStepBaseDistance) * spring
+            } else if normalizedProgress < 0.70 {
+                // Hold macro with micro sway
+                let micro = sin(elapsed * 2.5) * 0.04
+                curDist = macroDist + micro
+            } else {
+                // Snap pull-back to wide
+                let returnProgress = (normalizedProgress - 0.70) / 0.30
+                let spring = Self.springEaseOut(returnProgress)
+                curDist = macroDist + (returnDist - macroDist) * spring
+            }
+            let sway = sin(elapsed * 1.8) * 0.02
+            camera.setPose(
+                azimuth: currentStepBaseAzimuth + sway,
+                elevation: currentStepBaseElevation,
+                distance: curDist
+            )
+            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
+
+        case .dynamicArc(let speed, let heightSway):
+            // High-speed curved tracking arc with dynamic tilt
             let curAz = currentStepBaseAzimuth + elapsed * speed
-            let breath = sin(elapsed * 1.2) * 0.02
+            let curEl = currentStepBaseElevation + sin(elapsed * speed * 2.5) * heightSway
+            let curDist = currentStepBaseDistance + sin(elapsed * speed * 1.8) * 0.25
             camera.setPose(
                 azimuth: curAz,
-                elevation: currentStepBaseElevation + breath
+                elevation: curEl,
+                distance: curDist
             )
+            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
-        case .arcSweep(let speed):
-            let curAz = currentStepBaseAzimuth + elapsed * speed
-            let curEl = currentStepBaseElevation + sin(elapsed * speed * 2.0) * 0.05
+        case .elasticSnap(let punchDist, let settleDist):
+            // Quick punch-in and snap rebound
+            let spring = Self.springEaseOut(min(1.0, elapsed / 0.30))
+            let curDist = punchDist + (settleDist - punchDist) * spring
+            let micro = sin(elapsed * 1.8) * 0.015
             camera.setPose(
-                azimuth: curAz,
-                elevation: curEl
+                azimuth: currentStepBaseAzimuth + micro,
+                elevation: currentStepBaseElevation,
+                distance: curDist
             )
+            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
         }
     }
 
@@ -1028,6 +1117,10 @@ final class DemoSceneController {
 
         demoTimer?.invalidate()
         demoTimer = nil
+
+        // Restore FOV to 45 degrees
+        let aspect = filamentView.bounds.height > 0 ? Double(filamentView.bounds.width / filamentView.bounds.height) : 1.77
+        filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
         // Restore camera
         camera.lockAutoOrbit = false
@@ -1051,6 +1144,7 @@ final class DemoSceneController {
         // Restore shading mode & outline settings
         setShadingMode(savedShadingMode)
         outlineMaterial?.flowAnimationSpeed = 0.0
+        outlineMaterial?.outlineThickness = 0.02
 
         onDemoModeStateChanged?(false)
     }
