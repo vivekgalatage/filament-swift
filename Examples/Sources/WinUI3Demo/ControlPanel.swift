@@ -401,7 +401,7 @@ final class ControlPanel {
         // Inked Outlines
         addSection("Inked Outline")
 
-        outlineThicknessSlider = addFloatSlider("Outline thickness", min: 0.001, max: 0.05, step: 0.001, initial: Double(host.outlineMaterial?.outlineThickness ?? 0.015)) { [weak self] val in
+        outlineThicknessSlider = addFloatSlider("Outline thickness", min: 0.5, max: 8.0, step: 0.1, initial: Double(host.outlineMaterial?.outlineThickness ?? 2.5)) { [weak self] val in
             self?.host.setOutlineThickness(Float(val))
         }
 

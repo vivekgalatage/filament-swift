@@ -399,6 +399,7 @@ final class InspectorView: NSObject {
                  selected: scene.currentShadingMode.rawValue) { [weak self] index in
             guard let mode = DemoSceneController.ShadingMode(rawValue: index) else { return }
             self?.scene.setShadingMode(mode)
+            self?.syncShadingMode()
         }
 
         addPopup(to: stack, title: "Cel color",
@@ -1426,9 +1427,21 @@ final class InspectorView: NSObject {
         for binding in popupBindings where binding.key == "Style" {
             binding.popup.selectItem(at: scene.currentShadingMode.rawValue)
         }
+        for binding in popupBindings where binding.key == "Canvas" {
+            binding.popup.selectItem(at: scene.currentCanvasBackground.rawValue)
+        }
         if let toon = scene.toonMaterial {
             halftoneModePopup?.selectItem(at: toon.halftoneMode.rawValue)
             halftoneTargetPopup?.selectItem(at: toon.halftoneTarget.rawValue)
+        }
+        if let outline = scene.outlineMaterial {
+            outlineStylePopup?.selectItem(at: Int(outline.gradientMode.rawValue))
+            solidColorRow?.isHidden = (outline.gradientMode != .solid)
+            gradientControlsContainer?.isHidden = (outline.gradientMode == .solid)
+            if let binding = sliderBindings.first(where: { $0.key == "Outline width" }) {
+                binding.slider.doubleValue = Double(outline.outlineThickness)
+                binding.valueLabel.stringValue = binding.format(Double(outline.outlineThickness))
+            }
         }
     }
 

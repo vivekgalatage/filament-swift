@@ -64,6 +64,12 @@ final class DemoSceneController {
     private(set) var currentShadingMode: ShadingMode = .standardPBR
     private(set) var currentCanvasBackground: CanvasBackground = .darkStudio
     private(set) var currentOutlineColor: (r: Float, g: Float, b: Float) = (0.10, 0.08, 0.06)
+    private(set) var currentOutlineThickness: Float = 2.5
+    private(set) var currentOutlineJitter: Float = 0.0
+    private(set) var currentOutlineGradientMode: FilamentToonOutlineMaterial.GradientMode = .solid
+    private(set) var currentOutlineFlowSpeed: Float = 0.0
+    private(set) var currentCelBaseColor: (r: Float, g: Float, b: Float) = (0.96, 0.95, 0.94)
+    private(set) var currentCelShadowMultiplier: (r: Float, g: Float, b: Float) = (0.45, 0.45, 0.65)
     private(set) var toonMaterial: FilamentToonMaterial?
     private(set) var outlineMaterial: FilamentToonOutlineMaterial?
     private(set) var depthMaskMaterial: FilamentDepthMaskMaterial?
@@ -172,6 +178,9 @@ final class DemoSceneController {
         switch currentShadingMode {
         case .standardPBR:
             outlineModel.setVisible(false)
+            if !isDemoModeActive {
+                setCanvasBackground(currentCanvasBackground)
+            }
             do {
                 try model.loadGlb(at: url)
                 model.setRotation(radiansY: 0.0)
@@ -185,14 +194,30 @@ final class DemoSceneController {
 
         case .toonCel:
             outlineModel.setVisible(false)
+            if !isDemoModeActive {
+                setCanvasBackground(currentCanvasBackground)
+            }
             model.setPriority(4)
             if let toon = toonMaterial {
+                toon.halftoneMode = .disabled
+                toon.hatchJitter = 0.0
+                toon.halftoneBlend = 0.0
+                toon.baseColor = (currentCelBaseColor.r, currentCelBaseColor.g, currentCelBaseColor.b, 1.0)
+                toon.shadowColorMultiplier = (currentCelShadowMultiplier.r, currentCelShadowMultiplier.g, currentCelShadowMultiplier.b)
                 model.applyToonMaterial(toon)
             }
 
         case .toonWithOutline:
+            if !isDemoModeActive {
+                setCanvasBackground(currentCanvasBackground)
+            }
             model.setPriority(4)
             if let toon = toonMaterial {
+                toon.halftoneMode = .disabled
+                toon.hatchJitter = 0.0
+                toon.halftoneBlend = 0.0
+                toon.baseColor = (currentCelBaseColor.r, currentCelBaseColor.g, currentCelBaseColor.b, 1.0)
+                toon.shadowColorMultiplier = (currentCelShadowMultiplier.r, currentCelShadowMultiplier.g, currentCelShadowMultiplier.b)
                 model.applyToonMaterial(toon)
             }
             if !outlineModel.isLoaded {
@@ -203,12 +228,19 @@ final class DemoSceneController {
                 }
             }
             if let outline = outlineMaterial {
+                outline.outlineThickness = currentOutlineThickness
+                outline.outlineJitter = currentOutlineJitter
+                outline.gradientMode = currentOutlineGradientMode
+                outline.flowAnimationSpeed = currentOutlineFlowSpeed
                 outlineModel.applyOutlineMaterial(outline)
             }
             outlineModel.setPriority(6)
             outlineModel.setVisible(true)
 
         case .pbrWithOutline:
+            if !isDemoModeActive {
+                setCanvasBackground(currentCanvasBackground)
+            }
             do {
                 try model.loadGlb(at: url)
                 model.setRotation(radiansY: 0.0)
@@ -227,12 +259,19 @@ final class DemoSceneController {
                 }
             }
             if let outline = outlineMaterial {
+                outline.outlineThickness = currentOutlineThickness
+                outline.outlineJitter = currentOutlineJitter
+                outline.gradientMode = currentOutlineGradientMode
+                outline.flowAnimationSpeed = currentOutlineFlowSpeed
                 outlineModel.applyOutlineMaterial(outline)
             }
             outlineModel.setPriority(6)
             outlineModel.setVisible(true)
 
         case .outlineOnly:
+            if !isDemoModeActive {
+                setCanvasBackground(currentCanvasBackground)
+            }
             model.setPriority(4)
             if let mask = depthMaskMaterial {
                 model.applyDepthMaskMaterial(mask)
@@ -246,6 +285,10 @@ final class DemoSceneController {
                 }
             }
             if let outline = outlineMaterial {
+                outline.outlineThickness = currentOutlineThickness
+                outline.outlineJitter = currentOutlineJitter
+                outline.gradientMode = currentOutlineGradientMode
+                outline.flowAnimationSpeed = currentOutlineFlowSpeed
                 outlineModel.applyOutlineMaterial(outline)
             }
             outlineModel.setPriority(6)
@@ -253,20 +296,30 @@ final class DemoSceneController {
 
         case .comicHalftone:
             outlineModel.setVisible(false)
+            if !isDemoModeActive {
+                setCanvasBackground(currentCanvasBackground)
+            }
             model.setPriority(4)
             if let toon = toonMaterial {
-                if toon.halftoneMode == .disabled {
-                    toon.halftoneMode = .screenDots
+                if toon.halftoneMode == .disabled || toon.halftoneMode == .handdrawnSketch {
+                    toon.applyPreset(FilamentToonMaterial.spiderVersePreset)
                 }
+                toon.hatchJitter = 0.0
+                toon.halftoneBlend = 1.0
                 model.applyToonMaterial(toon)
             }
 
         case .halftoneWithOutline:
+            if !isDemoModeActive {
+                setCanvasBackground(currentCanvasBackground)
+            }
             model.setPriority(4)
             if let toon = toonMaterial {
-                if toon.halftoneMode == .disabled {
-                    toon.halftoneMode = .screenDots
+                if toon.halftoneMode == .disabled || toon.halftoneMode == .handdrawnSketch {
+                    toon.applyPreset(FilamentToonMaterial.mangaScreentonePreset)
                 }
+                toon.hatchJitter = 0.0
+                toon.halftoneBlend = 1.0
                 model.applyToonMaterial(toon)
             }
             if !outlineModel.isLoaded {
@@ -277,6 +330,10 @@ final class DemoSceneController {
                 }
             }
             if let outline = outlineMaterial {
+                outline.outlineThickness = currentOutlineThickness
+                outline.outlineJitter = currentOutlineJitter
+                outline.gradientMode = currentOutlineGradientMode
+                outline.flowAnimationSpeed = currentOutlineFlowSpeed
                 outlineModel.applyOutlineMaterial(outline)
             }
             outlineModel.setPriority(6)
@@ -285,8 +342,12 @@ final class DemoSceneController {
         case .handdrawnSketch:
             model.setPriority(4)
             if let toon = toonMaterial {
+                if toon.halftoneMode != .handdrawnSketch {
+                    toon.applyPreset(FilamentToonMaterial.technicalArchitecturalPreset)
+                }
                 toon.halftoneMode = .handdrawnSketch
                 toon.halftoneTarget = .fullSurface
+                toon.halftoneBlend = 1.0
                 model.applyToonMaterial(toon)
             }
             if !outlineModel.isLoaded {
@@ -298,8 +359,11 @@ final class DemoSceneController {
             }
             if let outline = outlineMaterial {
                 if outline.outlineJitter < 0.001 {
-                    outline.outlineJitter = 0.25
+                    outline.outlineJitter = 0.20
                 }
+                outline.outlineThickness = currentOutlineThickness
+                outline.gradientMode = .graphitePencil
+                outline.flowAnimationSpeed = 0.0
                 outlineModel.applyOutlineMaterial(outline)
             }
             outlineModel.setPriority(6)
@@ -337,6 +401,10 @@ final class DemoSceneController {
                 do {
                     let out = try engine.createOutlineMaterial(from: outURL)
                     out.outlineColor = (currentOutlineColor.r, currentOutlineColor.g, currentOutlineColor.b, 1.0)
+                    out.outlineThickness = currentOutlineThickness
+                    out.outlineJitter = currentOutlineJitter
+                    out.gradientMode = currentOutlineGradientMode
+                    out.flowAnimationSpeed = currentOutlineFlowSpeed
                     outlineMaterial = out
                     print("[AppKitDemo] Loaded ToonOutline material from \(outURL.path)")
                 } catch {
@@ -356,6 +424,7 @@ final class DemoSceneController {
 
     func setCanvasBackground(_ bg: CanvasBackground) {
         currentCanvasBackground = bg
+        guard !isDemoModeActive else { return }
         switch bg {
         case .darkStudio:
             filamentView.engine.setClearColor(r: 0.12, g: 0.13, b: 0.16, a: 1.0)
@@ -388,12 +457,14 @@ final class DemoSceneController {
     }
 
     func setOutlineThickness(_ value: Float) {
+        currentOutlineThickness = value
         ensureToonMaterials()
         outlineMaterial?.outlineThickness = value
         overlayWindow?.setOutlineThickness(value)
     }
 
     func setToonBaseColor(r: Float, g: Float, b: Float) {
+        currentCelBaseColor = (r, g, b)
         ensureToonMaterials()
         toonMaterial?.baseColor = (r, g, b, 1.0)
     }
@@ -406,6 +477,7 @@ final class DemoSceneController {
     }
 
     func setOutlineGradientMode(_ mode: FilamentToonOutlineMaterial.GradientMode) {
+        currentOutlineGradientMode = mode
         ensureToonMaterials()
         outlineMaterial?.gradientMode = mode
         overlayWindow?.setOutlineGradientMode(mode)
@@ -470,6 +542,7 @@ final class DemoSceneController {
     }
 
     func setOutlineFlowSpeed(_ speed: Float) {
+        currentOutlineFlowSpeed = speed
         ensureToonMaterials()
         outlineMaterial?.flowAnimationSpeed = speed
         overlayWindow?.setOutlineFlowSpeed(speed)
@@ -664,6 +737,7 @@ final class DemoSceneController {
     // MARK: - Handdrawn Sketch & CAD Technical Diagram controls
 
     func setOutlineJitter(_ jitter: Float) {
+        currentOutlineJitter = jitter
         ensureToonMaterials()
         outlineMaterial?.outlineJitter = jitter
         overlayWindow?.setOutlineJitter(jitter)
@@ -776,6 +850,10 @@ final class DemoSceneController {
     private var savedDistance: Double = 3.2
     private var savedTarget: (x: Double, y: Double, z: Double) = (0.0, 0.0, 0.0)
     private var savedAnimationPlaying: Bool = true
+    private var savedOutlineThickness: Float = 2.5
+    private var savedOutlineJitter: Float = 0.0
+    private var savedOutlineGradientMode: FilamentToonOutlineMaterial.GradientMode = .solid
+    private var savedOutlineFlowSpeed: Float = 0.0
 
     public var onDemoTurntableToggled: ((Bool) -> Void)?
     public var onDemoModeStateChanged: ((Bool) -> Void)?
@@ -985,6 +1063,10 @@ final class DemoSceneController {
         savedDistance = camera.distance
         savedTarget = camera.target
         savedAnimationPlaying = isAnimationPlaying
+        savedOutlineThickness = outlineMaterial?.outlineThickness ?? currentOutlineThickness
+        savedOutlineJitter = outlineMaterial?.outlineJitter ?? currentOutlineJitter
+        savedOutlineGradientMode = outlineMaterial?.gradientMode ?? currentOutlineGradientMode
+        savedOutlineFlowSpeed = outlineMaterial?.flowAnimationSpeed ?? currentOutlineFlowSpeed
 
         // 1. Center model at ~30% size in full window, scaled by demoZoomScale
         camera.setPose(azimuth: 0.0, elevation: 0.12, distance: 13.5 / demoZoomScale, target: (0.0, 0.0, 0.0))
@@ -1126,12 +1208,13 @@ final class DemoSceneController {
         let normalizedProgress = min(1.0, elapsed / duration)
 
         // Subtle outline pulse on cut impact (first 0.15s)
+        let baseThickness: Float = 2.5
         if elapsed < 0.15 {
             let pulseProgress = elapsed / 0.15
             let pulseScale = Float(1.0 + sin(pulseProgress * .pi) * 0.4)
-            outlineMaterial?.outlineThickness = 0.02 * pulseScale
+            outlineMaterial?.outlineThickness = baseThickness * pulseScale
         } else {
-            outlineMaterial?.outlineThickness = 0.02
+            outlineMaterial?.outlineThickness = baseThickness
         }
 
         let aspect: Double
@@ -1282,8 +1365,15 @@ final class DemoSceneController {
 
         // Restore shading mode & outline settings
         setShadingMode(savedShadingMode)
-        outlineMaterial?.flowAnimationSpeed = 0.0
-        outlineMaterial?.outlineThickness = 0.02
+        currentOutlineThickness = savedOutlineThickness
+        currentOutlineJitter = savedOutlineJitter
+        currentOutlineGradientMode = savedOutlineGradientMode
+        currentOutlineFlowSpeed = savedOutlineFlowSpeed
+
+        outlineMaterial?.flowAnimationSpeed = savedOutlineFlowSpeed
+        outlineMaterial?.outlineThickness = savedOutlineThickness
+        outlineMaterial?.outlineJitter = savedOutlineJitter
+        outlineMaterial?.gradientMode = savedOutlineGradientMode
 
         onDemoModeStateChanged?(false)
     }

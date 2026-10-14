@@ -55,7 +55,7 @@ final class GTKControlPanel {
 
         // Outline Controls
         addSectionHeader("Inked Outline", to: box)
-        addSlider(.outlineThickness, label: "Outline thickness", range: 0.001...0.05, step: 0.001, to: box)
+        addSlider(.outlineThickness, label: "Outline thickness", range: 0.5...8.0, step: 0.1, to: box)
         addDropdown(.outlineGradientMode, label: "Color mode", items: FilamentToonOutlineMaterial.GradientMode.allCases.map(\.title), to: box)
         addSlider(.outlineFlowSpeed, label: "Flow animation speed", range: 0...5.0, step: 0.1, to: box)
         addSlider(.outlineGradientScale, label: "Gradient frequency", range: 0.1...10.0, step: 0.1, to: box)
