@@ -750,6 +750,9 @@ final class DemoSceneController {
 
     public private(set) var isDemoModeActive: Bool = false
     public private(set) var isDemoTurntableEnabled: Bool = false
+    /// User-customizable zoom scale for Demo Mode camera choreography (0.05x to 20.0x, default 1.0x).
+    /// Magnifies or wide-angles all dynamic camera moves so models of any bounding-box scale are properly visible.
+    public private(set) var demoZoomScale: Double = 1.0
     private var demoTimer: Timer?
     private var demoStepIndex: Int = 0
 
@@ -777,6 +780,7 @@ final class DemoSceneController {
     public var onDemoTurntableToggled: ((Bool) -> Void)?
     public var onDemoModeStateChanged: ((Bool) -> Void)?
     public var onDemoModeStepChanged: ((Int, Int, String, String) -> Void)?
+    public var onDemoZoomScaleChanged: ((Double) -> Void)?
 
     public static let demoSteps: [DemoStep] = [
         DemoStep(
@@ -913,6 +917,29 @@ final class DemoSceneController {
         return x * x * (3.0 - 2.0 * x)
     }
 
+    public func setDemoZoomScale(_ scale: Double) {
+        let clamped = min(max(scale, 0.05), 20.0)
+        guard abs(demoZoomScale - clamped) > 0.0001 else { return }
+        demoZoomScale = clamped
+        onDemoZoomScaleChanged?(demoZoomScale)
+        if isDemoModeActive && isDemoTurntableEnabled {
+            camera.setPose(distance: currentStepBaseDistance / demoZoomScale)
+        }
+    }
+
+    public func adjustDemoZoomScale(byDelta delta: Double) {
+        let factor = pow(1.05, delta)
+        setDemoZoomScale(demoZoomScale * factor)
+    }
+
+    public func matchDemoZoomScaleToViewport() {
+        let refDistance = isDemoModeActive ? savedDistance : camera.distance
+        guard refDistance > 0.01 else { return }
+        // Step distances in demo mode average ~10.0 (Step 0 is 10.5, Step 1 is 8.2, Step 2 is 7.6, etc.)
+        let matchedScale = 10.0 / refDistance
+        setDemoZoomScale(matchedScale)
+    }
+
     @discardableResult
     func toggleDemoTurntable() -> Bool {
         guard isDemoModeActive else { return false }
@@ -938,6 +965,14 @@ final class DemoSceneController {
         guard !isDemoModeActive else { return }
         isDemoModeActive = true
 
+        filamentView.onZoomDelta = { [weak self] delta in
+            MainActor.assumeIsolated {
+                guard let self, self.isDemoModeActive else { return false }
+                self.adjustDemoZoomScale(byDelta: delta)
+                return true
+            }
+        }
+
         // Save state
         savedTransparency = filamentView.isTransparent
         savedWindowOpaque = window.isOpaque
@@ -951,8 +986,8 @@ final class DemoSceneController {
         savedTarget = camera.target
         savedAnimationPlaying = isAnimationPlaying
 
-        // 1. Center model at ~30% size in full window
-        camera.setPose(azimuth: 0.0, elevation: 0.12, distance: 13.5, target: (0.0, 0.0, 0.0))
+        // 1. Center model at ~30% size in full window, scaled by demoZoomScale
+        camera.setPose(azimuth: 0.0, elevation: 0.12, distance: 13.5 / demoZoomScale, target: (0.0, 0.0, 0.0))
         isDemoTurntableEnabled = false
         camera.isAutoOrbiting = false
         camera.lockAutoOrbit = false
@@ -983,6 +1018,7 @@ final class DemoSceneController {
         setShadingMode(.standardPBR)
 
         onDemoModeStateChanged?(true)
+        onDemoZoomScaleChanged?(demoZoomScale)
         let total = Self.demoSteps.count
         onDemoModeStepChanged?(0, total, "Standard PBR", "Full Window · Black Background")
 
@@ -1050,17 +1086,18 @@ final class DemoSceneController {
         currentStepBaseDistance = step.initialDistance
         currentCameraMove = step.cameraMove
 
+        let scaledDist = step.initialDistance / demoZoomScale
         if !isDemoTurntableEnabled {
             camera.setPose(
                 azimuth: step.initialAzimuth,
                 elevation: step.initialElevation,
-                distance: step.initialDistance,
+                distance: scaledDist,
                 target: (0.0, 0.0, 0.0)
             )
         } else {
             camera.setPose(
                 elevation: step.initialElevation,
-                distance: step.initialDistance,
+                distance: scaledDist,
                 target: (0.0, 0.0, 0.0)
             )
         }
@@ -1097,11 +1134,6 @@ final class DemoSceneController {
             outlineMaterial?.outlineThickness = 0.02
         }
 
-        if isDemoTurntableEnabled {
-            // Turntable is active (R key pressed): auto-orbit handles 360 spin
-            return
-        }
-
         let aspect: Double
         if filamentView.bounds.height > 0 {
             aspect = Double(filamentView.bounds.width / filamentView.bounds.height)
@@ -1109,94 +1141,110 @@ final class DemoSceneController {
             aspect = 1.77
         }
 
+        let scale = max(0.02, demoZoomScale)
+
+        if isDemoTurntableEnabled {
+            // Turntable is active (R key pressed): auto-orbit handles 360 spin
+            let targetDist = currentStepBaseDistance / scale
+            if abs(camera.distance - targetDist) > 0.005 {
+                camera.setPose(distance: targetDist)
+            }
+            let nearPlane = max(0.005, targetDist * 0.01)
+            let farPlane = max(1000.0, targetDist * 20.0)
+            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect, near: nearPlane, far: farPlane)
+            return
+        }
+
+        var curDist: Double = currentStepBaseDistance / scale
+        var curFov: Double = 45.0
+
         switch currentCameraMove {
         case .crashZoomIn(let startDist, let targetDist):
             // Fast spring rush in first 0.35s, then subtle breathing
             let spring = Self.springEaseOut(min(1.0, elapsed / 0.38))
-            let curDist = startDist + (targetDist - startDist) * spring
+            curDist = (startDist + (targetDist - startDist) * spring) / scale
             let breath = sin(elapsed * 2.0) * 0.015
             camera.setPose(
                 azimuth: currentStepBaseAzimuth + breath,
                 elevation: currentStepBaseElevation,
                 distance: curDist
             )
-            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
         case .whipPanSnap(let startOffsetAz, let startDist, let targetDist):
             // Whip pan rotation and crash punch in first 0.30s
             let spring = Self.springEaseOut(min(1.0, elapsed / 0.35))
             let curAz = (currentStepBaseAzimuth + startOffsetAz) - startOffsetAz * spring
-            let curDist = startDist + (targetDist - startDist) * spring
+            curDist = (startDist + (targetDist - startDist) * spring) / scale
             let drift = elapsed > 0.35 ? (elapsed - 0.35) * 0.08 : 0.0
             camera.setPose(
                 azimuth: curAz + drift,
                 elevation: currentStepBaseElevation,
                 distance: curDist
             )
-            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
         case .vertigoDollyZoom(let fromDist, let toDist, let fromFov, let toFov):
             // True Dolly Zoom: Dolly in/out while dynamically counter-warping FOV
             let hermite = Self.smoothHermite(normalizedProgress)
-            let curDist = fromDist + (toDist - fromDist) * hermite
-            let curFov = fromFov + (toFov - fromFov) * hermite
+            curDist = (fromDist + (toDist - fromDist) * hermite) / scale
+            curFov = fromFov + (toFov - fromFov) * hermite
             let sway = sin(elapsed * 1.5) * 0.02
             camera.setPose(
                 azimuth: currentStepBaseAzimuth + sway,
                 elevation: currentStepBaseElevation,
                 distance: curDist
             )
-            filamentView.engine.setCameraProjection(fovInDegrees: curFov, aspect: aspect)
 
         case .macroPunch(let macroDist, let returnDist):
             // Crash into macro detail, hold, then snap back
-            let curDist: Double
+            let unscaledDist: Double
             if normalizedProgress < 0.40 {
                 // Slam into macro
                 let spring = Self.springEaseOut(normalizedProgress / 0.40)
-                curDist = currentStepBaseDistance + (macroDist - currentStepBaseDistance) * spring
+                unscaledDist = currentStepBaseDistance + (macroDist - currentStepBaseDistance) * spring
             } else if normalizedProgress < 0.70 {
                 // Hold macro with micro sway
                 let micro = sin(elapsed * 2.5) * 0.04
-                curDist = macroDist + micro
+                unscaledDist = macroDist + micro
             } else {
                 // Snap pull-back to wide
                 let returnProgress = (normalizedProgress - 0.70) / 0.30
                 let spring = Self.springEaseOut(returnProgress)
-                curDist = macroDist + (returnDist - macroDist) * spring
+                unscaledDist = macroDist + (returnDist - macroDist) * spring
             }
+            curDist = unscaledDist / scale
             let sway = sin(elapsed * 1.8) * 0.02
             camera.setPose(
                 azimuth: currentStepBaseAzimuth + sway,
                 elevation: currentStepBaseElevation,
                 distance: curDist
             )
-            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
         case .dynamicArc(let speed, let heightSway):
             // High-speed curved tracking arc with dynamic tilt
             let curAz = currentStepBaseAzimuth + elapsed * speed
             let curEl = currentStepBaseElevation + sin(elapsed * speed * 2.5) * heightSway
-            let curDist = currentStepBaseDistance + sin(elapsed * speed * 1.8) * 0.25
+            curDist = (currentStepBaseDistance + sin(elapsed * speed * 1.8) * 0.25) / scale
             camera.setPose(
                 azimuth: curAz,
                 elevation: curEl,
                 distance: curDist
             )
-            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
 
         case .elasticSnap(let punchDist, let settleDist):
             // Quick punch-in and snap rebound
             let spring = Self.springEaseOut(min(1.0, elapsed / 0.30))
-            let curDist = punchDist + (settleDist - punchDist) * spring
+            curDist = (punchDist + (settleDist - punchDist) * spring) / scale
             let micro = sin(elapsed * 1.8) * 0.015
             camera.setPose(
                 azimuth: currentStepBaseAzimuth + micro,
                 elevation: currentStepBaseElevation,
                 distance: curDist
             )
-            filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
         }
+
+        let nearPlane = max(0.005, curDist * 0.01)
+        let farPlane = max(1000.0, curDist * 20.0)
+        filamentView.engine.setCameraProjection(fovInDegrees: curFov, aspect: aspect, near: nearPlane, far: farPlane)
     }
 
     func stopDemoMode(in window: NSWindow) {
@@ -1207,9 +1255,11 @@ final class DemoSceneController {
         demoTimer?.invalidate()
         demoTimer = nil
 
+        filamentView.onZoomDelta = nil
+
         // Restore FOV to 45 degrees
         let aspect = filamentView.bounds.height > 0 ? Double(filamentView.bounds.width / filamentView.bounds.height) : 1.77
-        filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect)
+        filamentView.engine.setCameraProjection(fovInDegrees: 45.0, aspect: aspect, near: 0.05, far: 2000.0)
 
         // Restore camera
         camera.lockAutoOrbit = false

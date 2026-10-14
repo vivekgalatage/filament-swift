@@ -20,6 +20,8 @@ final class InspectorView: NSObject {
     private var inspectorBackdrop: NSVisualEffectView!
     private var scrollView: NSScrollView!
     private var demoModeButton: NSButton?
+    private var demoZoomLabel: NSTextField?
+    private var demoZoomSlider: NSSlider?
     private var modelLabel: NSTextField!
     private var modelPopup: NSPopUpButton!
     private var discoveredModels: [ModelAsset] = []
@@ -275,6 +277,69 @@ final class InspectorView: NSObject {
         demoModeButton = demoBtn
         stack.addArrangedSubview(demoBtn)
         demoBtn.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+
+        // Demo Framing & Zoom Scale
+        let zoomHeaderRow = NSStackView()
+        zoomHeaderRow.translatesAutoresizingMaskIntoConstraints = false
+        zoomHeaderRow.orientation = .horizontal
+        zoomHeaderRow.alignment = .centerY
+        zoomHeaderRow.spacing = 6.0
+
+        let zLabel = NSTextField(labelWithString: String(format: "Demo Zoom Scale: %.2fx", scene.demoZoomScale))
+        zLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        zLabel.textColor = .secondaryLabelColor
+        demoZoomLabel = zLabel
+        zoomHeaderRow.addArrangedSubview(zLabel)
+
+        let zoomSpacer = NSView()
+        zoomSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        zoomHeaderRow.addArrangedSubview(zoomSpacer)
+
+        let matchBtn = NSButton(title: "🎯 Match Viewport", target: self, action: #selector(onMatchViewportClicked))
+        matchBtn.bezelStyle = .inline
+        matchBtn.controlSize = .mini
+        matchBtn.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        matchBtn.toolTip = "Calibrate demo zoom to frame the model at the current viewport distance"
+        zoomHeaderRow.addArrangedSubview(matchBtn)
+
+        let resetZoomBtn = NSButton(title: "1.0x", target: self, action: #selector(onDemoZoomResetClicked))
+        resetZoomBtn.bezelStyle = .inline
+        resetZoomBtn.controlSize = .mini
+        resetZoomBtn.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        resetZoomBtn.toolTip = "Reset demo zoom to 1.0x"
+        zoomHeaderRow.addArrangedSubview(resetZoomBtn)
+
+        stack.addArrangedSubview(zoomHeaderRow)
+        zoomHeaderRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+
+        let zoomControlRow = NSStackView()
+        zoomControlRow.translatesAutoresizingMaskIntoConstraints = false
+        zoomControlRow.orientation = .horizontal
+        zoomControlRow.alignment = .centerY
+        zoomControlRow.spacing = 6.0
+
+        let minusBtn = NSButton(title: "−", target: self, action: #selector(onDemoZoomMinusClicked))
+        minusBtn.bezelStyle = .roundRect
+        minusBtn.controlSize = .small
+        minusBtn.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+        minusBtn.toolTip = "Zoom Out (- or scroll down)"
+        zoomControlRow.addArrangedSubview(minusBtn)
+
+        let slider = NSSlider(value: scene.demoZoomScale, minValue: 0.1, maxValue: 8.0, target: self, action: #selector(onDemoZoomSliderChanged(_:)))
+        slider.controlSize = .small
+        slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        demoZoomSlider = slider
+        zoomControlRow.addArrangedSubview(slider)
+
+        let plusBtn = NSButton(title: "+", target: self, action: #selector(onDemoZoomPlusClicked))
+        plusBtn.bezelStyle = .roundRect
+        plusBtn.controlSize = .small
+        plusBtn.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+        plusBtn.toolTip = "Zoom In (+ or scroll up)"
+        zoomControlRow.addArrangedSubview(plusBtn)
+
+        stack.addArrangedSubview(zoomControlRow)
+        zoomControlRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
     }
 
     private func addModelSection(to stack: NSStackView) {
@@ -2006,6 +2071,33 @@ final class InspectorView: NSObject {
 
     @objc func toggleDemoModeClicked() {
         onToggleDemoModeRequested?()
+    }
+
+    @objc private func onDemoZoomSliderChanged(_ sender: NSSlider) {
+        scene.setDemoZoomScale(sender.doubleValue)
+    }
+
+    @objc private func onDemoZoomMinusClicked() {
+        scene.adjustDemoZoomScale(byDelta: -1.5)
+    }
+
+    @objc private func onDemoZoomPlusClicked() {
+        scene.adjustDemoZoomScale(byDelta: 1.5)
+    }
+
+    @objc private func onDemoZoomResetClicked() {
+        scene.setDemoZoomScale(1.0)
+    }
+
+    @objc private func onMatchViewportClicked() {
+        scene.matchDemoZoomScaleToViewport()
+    }
+
+    func setDemoZoomScale(_ scale: Double) {
+        demoZoomLabel?.stringValue = String(format: "Demo Zoom Scale: %.2fx", scale)
+        if let slider = demoZoomSlider {
+            slider.doubleValue = min(max(scale, slider.minValue), slider.maxValue)
+        }
     }
 
     func syncDemoModeUI(active: Bool) {

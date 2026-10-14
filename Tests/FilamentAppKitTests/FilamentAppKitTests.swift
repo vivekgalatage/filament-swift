@@ -170,4 +170,39 @@ final class FilamentAppKitTests: XCTestCase {
         _ = sem.wait(timeout: .now() + 20)
         XCTAssertNil(holder.value)
     }
+
+    @MainActor
+    func testOrbitCameraExpandedBounds() {
+        let engine = FilamentEngine(backend: .metal)
+        let camera = FilamentOrbitCamera(engine: engine, distance: 10.0)
+        XCTAssertEqual(camera.minDistance, 0.01)
+        XCTAssertEqual(camera.maxDistance, 2000.0)
+
+        // Setting a close distance for micro models
+        camera.setDistance(0.05)
+        XCTAssertEqual(camera.distance, 0.05, accuracy: 1e-4)
+
+        // Setting a distant distance for massive models
+        camera.setDistance(500.0)
+        XCTAssertEqual(camera.distance, 500.0, accuracy: 1e-4)
+
+        // Ensure projection accepts near and far parameters
+        engine.setCameraProjection(fovInDegrees: 45.0, aspect: 1.77, near: 0.005, far: 5000.0)
+    }
+
+    @MainActor
+    func testViewOnZoomDeltaHook() {
+        let view = FilamentView(frame: NSRect(x: 0, y: 0, width: 320, height: 240))
+        var receivedDelta: Double?
+
+        view.onZoomDelta = { delta in
+            receivedDelta = delta
+            return true
+        }
+
+        XCTAssertNotNil(view.onZoomDelta)
+        let handled = view.onZoomDelta?(1.25) ?? false
+        XCTAssertTrue(handled)
+        XCTAssertEqual(receivedDelta, 1.25)
+    }
 }

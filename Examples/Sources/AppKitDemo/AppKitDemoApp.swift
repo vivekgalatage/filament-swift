@@ -281,6 +281,10 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         scene.onDemoModeStepChanged = { [weak self] stepIndex, total, title, subtitle in
             self?.demoHUD?.update(step: stepIndex + 1, total: total, title: title, subtitle: subtitle)
         }
+        scene.onDemoZoomScaleChanged = { [weak self] scale in
+            self?.demoHUD?.setZoomScale(scale)
+            self?.inspector.setDemoZoomScale(scale)
+        }
     }
 
     // MARK: - Native File Open Dialog
@@ -466,6 +470,18 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
                         hud.isHidden.toggle()
                     }
                     return nil
+                } else if (chars == "=" || chars == "+") && self.scene?.isDemoModeActive == true {
+                    self.scene?.adjustDemoZoomScale(byDelta: 1.5)
+                    return nil
+                } else if (chars == "-" || chars == "_") && self.scene?.isDemoModeActive == true {
+                    self.scene?.adjustDemoZoomScale(byDelta: -1.5)
+                    return nil
+                } else if chars == "0" && self.scene?.isDemoModeActive == true {
+                    self.scene?.setDemoZoomScale(1.0)
+                    return nil
+                } else if chars == "f" && self.scene?.isDemoModeActive == true {
+                    self.scene?.matchDemoZoomScaleToViewport()
+                    return nil
                 }
             }
             return event
@@ -514,7 +530,17 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
                 hud.onTurntableToggleRequested = { [weak self] in
                     self?.toggleDemoTurntable()
                 }
+                hud.onZoomInRequested = { [weak self] in
+                    self?.scene?.adjustDemoZoomScale(byDelta: 1.5)
+                }
+                hud.onZoomOutRequested = { [weak self] in
+                    self?.scene?.adjustDemoZoomScale(byDelta: -1.5)
+                }
+                hud.onZoomResetRequested = { [weak self] in
+                    self?.scene?.setDemoZoomScale(1.0)
+                }
                 hud.setTurntableState(enabled: scene.isDemoTurntableEnabled)
+                hud.setZoomScale(scene.demoZoomScale)
                 hud.present(in: contentView)
                 demoHUD = hud
             }

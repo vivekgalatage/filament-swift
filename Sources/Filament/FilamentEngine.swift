@@ -296,7 +296,7 @@ public final class FilamentEngine: @unchecked Sendable {
     }
 
     /// Configures the camera projection matrix.
-    public func setCameraProjection(fovInDegrees: Double, aspect: Double, near: Double = 0.1, far: Double = 100.0) {
+    public func setCameraProjection(fovInDegrees: Double, aspect: Double, near: Double = 0.05, far: Double = 2000.0) {
         guard let eng = storage.engine, let cam = currentCamera(eng) else { return }
         FilamentBridge.setCameraProjection(cam, fovInDegrees, aspect, near, far)
     }

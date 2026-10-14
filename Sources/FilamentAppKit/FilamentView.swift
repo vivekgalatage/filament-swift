@@ -10,6 +10,9 @@ public final class FilamentView: NSView {
     public let engine: FilamentEngine
     /// Optional interactive orbit/pan/zoom camera controller driven by mouse and trackpad events.
     public var orbitCamera: FilamentOrbitCamera?
+    /// Optional hook invoked on mouse scroll or trackpad gestures to handle custom zoom logic (e.g. demo mode).
+    /// Returns true if the gesture was handled, bypassing the standard orbitCamera zoom.
+    public var onZoomDelta: ((Double) -> Bool)?
 
     private let swapChainBox = FilamentSwapChainBox()
     private var swapChain: OpaquePointer? { swapChainBox.handle }
@@ -106,12 +109,21 @@ public final class FilamentView: NSView {
         if event.modifierFlags.contains(.shift) || event.modifierFlags.contains(.option) {
             orbitCamera.pan(deltaX: Double(event.scrollingDeltaX), deltaY: Double(event.scrollingDeltaY))
         } else {
-            let scale = event.hasPreciseScrollingDeltas ? 0.08 : 0.8
-            orbitCamera.zoom(delta: Double(event.scrollingDeltaY) * scale)
+            let scale = event.hasPreciseScrollingDeltas ? 0.04 : 0.4
+            let delta = Double(event.scrollingDeltaY) * scale
+            if let onZoomDelta, onZoomDelta(delta) {
+                return
+            }
+            let cameraScale = event.hasPreciseScrollingDeltas ? 0.08 : 0.8
+            orbitCamera.zoom(delta: Double(event.scrollingDeltaY) * cameraScale)
         }
     }
 
     public override func magnify(with event: NSEvent) {
+        let delta = Double(event.magnification) * 4.0
+        if let onZoomDelta, onZoomDelta(delta) {
+            return
+        }
         orbitCamera?.zoom(delta: Double(event.magnification) * 8.0)
     }
 

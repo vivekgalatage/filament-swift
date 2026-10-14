@@ -28,8 +28,8 @@ public final class FilamentOrbitCamera {
 
     public var orbitSensitivity: Double = 0.007
     public var panSensitivity: Double = 0.0015
-    public var minDistance: Double = 0.2
-    public var maxDistance: Double = 50.0
+    public var minDistance: Double = 0.01
+    public var maxDistance: Double = 2000.0
 
     private let defaultAzimuth: Double
     private let defaultElevation: Double
@@ -48,7 +48,7 @@ public final class FilamentOrbitCamera {
         self.engine = engine
         self.defaultAzimuth = azimuth
         self.defaultElevation = min(max(elevation, -Self.maxElevation), Self.maxElevation)
-        self.defaultDistance = min(max(distance, 0.2), 50.0)
+        self.defaultDistance = min(max(distance, 0.01), 2000.0)
         self.defaultTarget = target
 
         self.azimuth = self.defaultAzimuth

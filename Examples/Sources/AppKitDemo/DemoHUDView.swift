@@ -6,11 +6,17 @@ import AppKit
 final class DemoHUDView: NSVisualEffectView {
     var onExitRequested: (() -> Void)?
     var onTurntableToggleRequested: (() -> Void)?
+    var onZoomInRequested: (() -> Void)?
+    var onZoomOutRequested: (() -> Void)?
+    var onZoomResetRequested: (() -> Void)?
 
     private let badgeLabel = NSTextField(labelWithString: "● REC REEL")
     private let stepLabel = NSTextField(labelWithString: "Step 1 of 9")
     private let titleLabel = NSTextField(labelWithString: "Standard PBR")
     private let subtitleLabel = NSTextField(labelWithString: "Physically-Based Rendering")
+    private let zoomOutButton = NSButton()
+    private let zoomScaleButton = NSButton()
+    private let zoomInButton = NSButton()
     private let turntableButton = NSButton()
     private let exitButton = NSButton()
 
@@ -95,6 +101,47 @@ final class DemoHUDView: NSVisualEffectView {
 
         stack.addArrangedSubview(textStack)
 
+        // Separator before Zoom
+        let sepZoom = NSBox()
+        sepZoom.boxType = .separator
+        sepZoom.translatesAutoresizingMaskIntoConstraints = false
+        sepZoom.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        sepZoom.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        stack.addArrangedSubview(sepZoom)
+
+        // Zoom Out button [-]
+        zoomOutButton.title = "−"
+        zoomOutButton.bezelStyle = .inline
+        zoomOutButton.controlSize = .small
+        zoomOutButton.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+        zoomOutButton.toolTip = "Zoom Out (- or scroll down)"
+        zoomOutButton.target = self
+        zoomOutButton.action = #selector(onZoomOutClicked)
+        zoomOutButton.setContentHuggingPriority(.required, for: .horizontal)
+        stack.addArrangedSubview(zoomOutButton)
+
+        // Zoom Scale Reset button [🔍 1.00x]
+        zoomScaleButton.title = "🔍 1.00x"
+        zoomScaleButton.bezelStyle = .inline
+        zoomScaleButton.controlSize = .small
+        zoomScaleButton.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        zoomScaleButton.toolTip = "Demo Zoom Scale (Click or press 0 to reset to 1.00x)"
+        zoomScaleButton.target = self
+        zoomScaleButton.action = #selector(onZoomResetClicked)
+        zoomScaleButton.setContentHuggingPriority(.required, for: .horizontal)
+        stack.addArrangedSubview(zoomScaleButton)
+
+        // Zoom In button [+]
+        zoomInButton.title = "+"
+        zoomInButton.bezelStyle = .inline
+        zoomInButton.controlSize = .small
+        zoomInButton.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+        zoomInButton.toolTip = "Zoom In (+ or scroll up)"
+        zoomInButton.target = self
+        zoomInButton.action = #selector(onZoomInClicked)
+        zoomInButton.setContentHuggingPriority(.required, for: .horizontal)
+        stack.addArrangedSubview(zoomInButton)
+
         // Spacer to push action buttons
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -121,12 +168,33 @@ final class DemoHUDView: NSVisualEffectView {
         stack.addArrangedSubview(exitButton)
     }
 
+    @objc private func onZoomOutClicked() {
+        onZoomOutRequested?()
+    }
+
+    @objc private func onZoomResetClicked() {
+        onZoomResetRequested?()
+    }
+
+    @objc private func onZoomInClicked() {
+        onZoomInRequested?()
+    }
+
     @objc private func onTurntableClicked() {
         onTurntableToggleRequested?()
     }
 
     @objc private func onExitClicked() {
         onExitRequested?()
+    }
+
+    func setZoomScale(_ scale: Double) {
+        zoomScaleButton.title = String(format: "🔍 %.2fx", scale)
+        if abs(scale - 1.0) < 0.01 {
+            zoomScaleButton.contentTintColor = .secondaryLabelColor
+        } else {
+            zoomScaleButton.contentTintColor = .systemOrange
+        }
     }
 
     func setTurntableState(enabled: Bool) {
@@ -146,8 +214,8 @@ final class DemoHUDView: NSVisualEffectView {
             centerXAnchor.constraint(equalTo: parentView.centerXAnchor),
             bottomAnchor.constraint(equalTo: parentView.bottomAnchor, constant: -24),
             heightAnchor.constraint(equalToConstant: 44),
-            widthAnchor.constraint(greaterThanOrEqualToConstant: 520),
-            widthAnchor.constraint(lessThanOrEqualToConstant: 740),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 640),
+            widthAnchor.constraint(lessThanOrEqualToConstant: 920),
         ])
 
         alphaValue = 0.0
