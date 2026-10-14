@@ -5,15 +5,20 @@ import FilamentAppKit
 
 /// macOS AppKit application delegate and window controller for the FilamentSwift demo.
 @MainActor
-final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSToolbarDelegate {
     private var window: NSWindow!
     private var scene: DemoSceneController!
     private var inspector: InspectorView!
+    private var demoHUD: DemoHUDView?
+    private var demoToolbarItem: NSToolbarItem?
+    private var demoMenuItem: NSMenuItem?
+    private var keyMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMainMenu()
         setupWindow()
         setupSceneAndInspector()
+        setupKeyMonitor()
         scene.loadInitialModel()
         scene.startRenderLoop()
     }
@@ -23,6 +28,10 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
         scene?.shutdown()
     }
 
@@ -56,6 +65,15 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         mainMenu.addItem(fileItem)
 
         let viewMenu = NSMenu(title: "View")
+        let demoItem = NSMenuItem(
+            title: "🎬 Start Demo Reel (Auto-Cycle)",
+            action: #selector(toggleDemoModeMenuClicked),
+            keyEquivalent: "d"
+        )
+        self.demoMenuItem = demoItem
+        viewMenu.addItem(demoItem)
+        viewMenu.addItem(NSMenuItem.separator())
+
         viewMenu.addItem(NSMenuItem(
             title: "Reset PBR Settings",
             action: #selector(resetPBRMenuClicked),
@@ -70,6 +88,11 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             title: "Toggle Orbit",
             action: #selector(toggleOrbitMenuClicked),
             keyEquivalent: " "
+        ))
+        viewMenu.addItem(NSMenuItem(
+            title: "Toggle Inspector Panel",
+            action: #selector(toggleInspectorMenuClicked),
+            keyEquivalent: "i"
         ))
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(NSMenuItem(
@@ -192,6 +215,13 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         window.minSize = NSSize(width: 940, height: 620)
         window.center()
         window.delegate = self
+
+        let toolbar = NSToolbar(identifier: "AppKitDemoToolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconAndLabel
+        window.toolbar = toolbar
+        window.toolbarStyle = .unified
+
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
@@ -214,6 +244,10 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             }
         )
 
+        inspector.onToggleDemoModeRequested = { [weak self] in
+            self?.toggleDemoMode()
+        }
+
         scene.onModelStateChanged = { [weak self] in
             self?.inspector.syncModelUI()
         }
@@ -222,6 +256,12 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         }
         scene.onFrameRendered = { [weak self] fps, orbiting in
             self?.inspector.updateStatusBadge(fps: fps, isOrbiting: orbiting)
+        }
+        scene.onDemoModeStateChanged = { [weak self] active in
+            self?.updateDemoModeUI(active: active)
+        }
+        scene.onDemoModeStepChanged = { [weak self] stepIndex, total, title, subtitle in
+            self?.demoHUD?.update(step: stepIndex + 1, total: total, title: title, subtitle: subtitle)
         }
     }
 
@@ -339,6 +379,158 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     @objc private func vibgyorPaletteMenuClicked() {
         inspector?.applyVibgyorPalette()
     }
+
+    // MARK: - Demo Mode & Keyboard Monitoring
+
+    private func setupKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+
+            if event.keyCode == 53 {
+                if self.scene?.isDemoModeActive == true {
+                    self.stopDemoMode()
+                    return nil
+                }
+            }
+
+            if let firstResponder = self.window?.firstResponder as? NSTextView, firstResponder.isEditable {
+                return event
+            }
+            if let firstResponder = self.window?.firstResponder as? NSTextField, firstResponder.isEditable {
+                return event
+            }
+
+            let chars = event.charactersIgnoringModifiers?.lowercased()
+            if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+                if chars == "d" {
+                    self.toggleDemoMode()
+                    return nil
+                } else if chars == "h" && self.scene?.isDemoModeActive == true {
+                    if let hud = self.demoHUD {
+                        hud.isHidden.toggle()
+                    }
+                    return nil
+                }
+            }
+            return event
+        }
+    }
+
+    @objc func toggleDemoMode() {
+        guard let window, let scene else { return }
+        _ = scene.toggleDemoMode(in: window)
+    }
+
+    func stopDemoMode() {
+        guard let window, let scene, scene.isDemoModeActive else { return }
+        scene.stopDemoMode(in: window)
+    }
+
+    @objc private func toggleDemoModeMenuClicked() {
+        toggleDemoMode()
+    }
+
+    @objc private func toggleInspectorMenuClicked() {
+        inspector.setHidden(!inspector.isHidden)
+    }
+
+    private func updateDemoModeUI(active: Bool) {
+        inspector.syncDemoModeUI(active: active)
+        inspector.setHidden(active)
+        window.titleVisibility = active ? .hidden : .visible
+
+        if active {
+            demoMenuItem?.title = "⏹ Stop Demo Reel"
+            demoToolbarItem?.label = "Stop Reel"
+            demoToolbarItem?.image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: "Stop Reel")
+
+            if demoHUD == nil, let contentView = window.contentView {
+                let hud = DemoHUDView()
+                hud.onExitRequested = { [weak self] in
+                    self?.stopDemoMode()
+                }
+                hud.present(in: contentView)
+                demoHUD = hud
+            }
+        } else {
+            demoMenuItem?.title = "🎬 Start Demo Reel (Auto-Cycle)"
+            demoToolbarItem?.label = "Demo Reel"
+            demoToolbarItem?.image = NSImage(systemSymbolName: "play.circle.fill", accessibilityDescription: "Demo Reel")
+
+            demoHUD?.dismiss()
+            demoHUD = nil
+            inspector.syncShadingMode()
+        }
+    }
+
+    // MARK: - NSToolbarDelegate
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        switch itemIdentifier {
+        case .demoMode:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = "Demo Reel"
+            item.paletteLabel = "Demo Reel"
+            item.toolTip = "Start automated product showcase reel (D or Esc)"
+            item.image = NSImage(systemSymbolName: "play.circle.fill", accessibilityDescription: "Demo Reel")
+            item.target = self
+            item.action = #selector(toggleDemoModeMenuClicked)
+            demoToolbarItem = item
+            return item
+
+        case .openModel:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = "Open Model"
+            item.paletteLabel = "Open Model"
+            item.toolTip = "Load glTF binary (.glb) model"
+            item.image = NSImage(systemSymbolName: "folder", accessibilityDescription: "Open Model")
+            item.target = self
+            item.action = #selector(openModelMenuClicked)
+            return item
+
+        case .toggleOverlay:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = "Companion"
+            item.paletteLabel = "Companion Window"
+            item.toolTip = "Toggle Floating Transparent Companion Window"
+            item.image = NSImage(systemSymbolName: "macwindow.on.rectangle", accessibilityDescription: "Companion")
+            item.target = self
+            item.action = #selector(toggleOverlayMenuClicked)
+            return item
+
+        case .toggleInspector:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = "Inspector"
+            item.paletteLabel = "Toggle Inspector"
+            item.toolTip = "Show or hide inspector panel"
+            item.image = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Inspector")
+            item.target = self
+            item.action = #selector(toggleInspectorMenuClicked)
+            return item
+
+        default:
+            return nil
+        }
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.demoMode, .flexibleSpace, .openModel, .toggleOverlay, .toggleInspector]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.demoMode, .openModel, .toggleOverlay, .toggleInspector, .flexibleSpace, .space]
+    }
+}
+
+extension NSToolbarItem.Identifier {
+    static let demoMode = NSToolbarItem.Identifier("com.filament.appkit.demoMode")
+    static let openModel = NSToolbarItem.Identifier("com.filament.appkit.openModel")
+    static let toggleOverlay = NSToolbarItem.Identifier("com.filament.appkit.toggleOverlay")
+    static let toggleInspector = NSToolbarItem.Identifier("com.filament.appkit.toggleInspector")
 }
 
 @main

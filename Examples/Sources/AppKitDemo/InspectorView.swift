@@ -15,8 +15,11 @@ final class InspectorView: NSObject {
     private let scene: DemoSceneController
     private let onOpenModelRequested: () -> Void
     private let onToggleTransparencyRequested: () -> Bool
+    var onToggleDemoModeRequested: (() -> Void)?
 
     private var inspectorBackdrop: NSVisualEffectView!
+    private var scrollView: NSScrollView!
+    private var demoModeButton: NSButton?
     private var modelLabel: NSTextField!
     private var modelPopup: NSPopUpButton!
     private var discoveredModels: [ModelAsset] = []
@@ -158,7 +161,7 @@ final class InspectorView: NSObject {
         inspectorBackdrop.layer?.masksToBounds = true
         contentView.addSubview(inspectorBackdrop)
 
-        let scrollView = NSScrollView()
+        scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -210,6 +213,18 @@ final class InspectorView: NSObject {
         syncControlsFromSettings()
     }
 
+    var isHidden: Bool {
+        get { inspectorBackdrop.isHidden }
+        set {
+            inspectorBackdrop.isHidden = newValue
+            scrollView.isHidden = newValue
+        }
+    }
+
+    func setHidden(_ hidden: Bool) {
+        self.isHidden = hidden
+    }
+
     private func addHeader(to stack: NSStackView) {
         let title = NSTextField(labelWithString: "Filament Swift")
         title.font = NSFont.systemFont(ofSize: 17, weight: .bold)
@@ -224,6 +239,16 @@ final class InspectorView: NSObject {
         hint.font = NSFont.systemFont(ofSize: 10, weight: .regular)
         hint.textColor = .tertiaryLabelColor
         stack.addArrangedSubview(hint)
+
+        let demoBtn = NSButton(title: "🎬 Start Demo Reel (Auto-Cycle)", target: self, action: #selector(toggleDemoModeClicked))
+        demoBtn.translatesAutoresizingMaskIntoConstraints = false
+        demoBtn.bezelStyle = .rounded
+        demoBtn.controlSize = .regular
+        demoBtn.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        demoBtn.contentTintColor = .systemPurple
+        demoModeButton = demoBtn
+        stack.addArrangedSubview(demoBtn)
+        demoBtn.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
     }
 
     private func addModelSection(to stack: NSStackView) {
@@ -1622,5 +1647,21 @@ final class InspectorView: NSObject {
         let a = Float(c.alphaComponent)
         scene.setHalftonePaperColor(r: r, g: g, b: b, a: a)
         halftonePaperColorPopup?.selectItem(withTitle: "Custom…")
+    }
+
+    // MARK: - Demo Mode Actions
+
+    @objc func toggleDemoModeClicked() {
+        onToggleDemoModeRequested?()
+    }
+
+    func syncDemoModeUI(active: Bool) {
+        if active {
+            demoModeButton?.title = "⏹ Stop Demo Reel"
+            demoModeButton?.contentTintColor = .systemRed
+        } else {
+            demoModeButton?.title = "🎬 Start Demo Reel (Auto-Cycle)"
+            demoModeButton?.contentTintColor = .systemPurple
+        }
     }
 }

@@ -628,6 +628,256 @@ final class DemoSceneController {
         overlayWindow?.applyHalftonePreset(preset)
     }
 
+    // MARK: - Demo Mode (Product Video Reel)
+
+    public struct DemoStep: Sendable {
+        public let title: String
+        public let subtitle: String
+        public let mode: ShadingMode
+        public let outlineMode: FilamentToonOutlineMaterial.GradientMode?
+        public let outlineSpeed: Float?
+        public let halftonePreset: FilamentToonMaterial.HalftonePreset?
+    }
+
+    public private(set) var isDemoModeActive: Bool = false
+    private var demoTimer: Timer?
+    private var demoStepIndex: Int = 0
+
+    // Saved state for restoring when demo mode exits
+    private var savedTransparency: Bool = false
+    private var savedWindowOpaque: Bool = true
+    private var savedWindowBgColor: NSColor?
+    private var savedCanvasBackground: CanvasBackground = .darkStudio
+    private var savedShadingMode: ShadingMode = .standardPBR
+    private var savedAutoOrbit: Bool = false
+    private var savedAzimuth: Double = 0.0
+    private var savedElevation: Double = 0.25
+    private var savedDistance: Double = 3.2
+    private var savedTarget: (x: Double, y: Double, z: Double) = (0.0, 0.0, 0.0)
+    private var savedAnimationPlaying: Bool = true
+
+    public var onDemoModeStateChanged: ((Bool) -> Void)?
+    public var onDemoModeStepChanged: ((Int, Int, String, String) -> Void)?
+
+    public static let demoSteps: [DemoStep] = [
+        DemoStep(
+            title: "Standard PBR",
+            subtitle: "Physically-Based Rendering (Metal / Vulkan)",
+            mode: .standardPBR,
+            outlineMode: nil,
+            outlineSpeed: nil,
+            halftonePreset: nil
+        ),
+        DemoStep(
+            title: "Toon Cel (Cartoon)",
+            subtitle: "2-Band Stepped Lighting & Smooth Edge Feathers",
+            mode: .toonCel,
+            outlineMode: nil,
+            outlineSpeed: nil,
+            halftonePreset: nil
+        ),
+        DemoStep(
+            title: "Toon + Inked Outline",
+            subtitle: "Inverted Hull Normal Extrusion & Front-Face Culling",
+            mode: .toonWithOutline,
+            outlineMode: .solid,
+            outlineSpeed: 0.0,
+            halftonePreset: nil
+        ),
+        DemoStep(
+            title: "PBR + Inked Outline",
+            subtitle: "Photorealistic Textures with Graphic Ink Outlines",
+            mode: .pbrWithOutline,
+            outlineMode: .solid,
+            outlineSpeed: 0.0,
+            halftonePreset: nil
+        ),
+        DemoStep(
+            title: "Outline Only (Transparent Body)",
+            subtitle: "Zero-Alpha Depth Mask with Inked Wireframe Hull",
+            mode: .outlineOnly,
+            outlineMode: .solid,
+            outlineSpeed: 0.0,
+            halftonePreset: nil
+        ),
+        DemoStep(
+            title: "Comic Halftone (Spider-Verse Pop-Art)",
+            subtitle: "Screen-Space Ben-Day Dots & CMYK Separation",
+            mode: .comicHalftone,
+            outlineMode: nil,
+            outlineSpeed: nil,
+            halftonePreset: FilamentToonMaterial.spiderVersePreset
+        ),
+        DemoStep(
+            title: "Manga Screentone + Outline",
+            subtitle: "Surface UV Screentone Dots on Shadow Transitions",
+            mode: .halftoneWithOutline,
+            outlineMode: .solid,
+            outlineSpeed: 0.0,
+            halftonePreset: FilamentToonMaterial.mangaScreentonePreset
+        ),
+        DemoStep(
+            title: "VIBGYOR Rainbow Spectrum",
+            subtitle: "Dynamic Multi-Color Animated Rainbow Outline",
+            mode: .toonWithOutline,
+            outlineMode: .rainbow,
+            outlineSpeed: 1.5,
+            halftonePreset: nil
+        ),
+        DemoStep(
+            title: "Random Multi-Color Facets",
+            subtitle: "Procedural Randomized Facet Outline Pattern",
+            mode: .toonWithOutline,
+            outlineMode: .randomFacets,
+            outlineSpeed: 0.0,
+            halftonePreset: nil
+        ),
+    ]
+
+    @discardableResult
+    func toggleDemoMode(in window: NSWindow) -> Bool {
+        if isDemoModeActive {
+            stopDemoMode(in: window)
+            return false
+        } else {
+            startDemoMode(in: window)
+            return true
+        }
+    }
+
+    func startDemoMode(in window: NSWindow) {
+        guard !isDemoModeActive else { return }
+        isDemoModeActive = true
+
+        // Save state
+        savedTransparency = filamentView.isTransparent
+        savedWindowOpaque = window.isOpaque
+        savedWindowBgColor = window.backgroundColor
+        savedCanvasBackground = currentCanvasBackground
+        savedShadingMode = currentShadingMode
+        savedAutoOrbit = camera.isAutoOrbiting
+        savedAzimuth = camera.azimuth
+        savedElevation = camera.elevation
+        savedDistance = camera.distance
+        savedTarget = camera.target
+        savedAnimationPlaying = isAnimationPlaying
+
+        // 1. Center model at ~30% size in full window
+        camera.setPose(azimuth: 0.0, elevation: 0.15, distance: 10.5, target: (0.0, 0.0, 0.0))
+        camera.isAutoOrbiting = true
+        camera.lockAutoOrbit = true
+
+        if model.hasAnimations {
+            isAnimationPlaying = true
+            model.selectAnimation(at: 0)
+            if outlineModel.isLoaded {
+                outlineModel.selectAnimation(at: 0)
+            }
+        }
+
+        // 2. Full window with black background, alpha off
+        filamentView.isTransparent = false
+        window.isOpaque = true
+        window.backgroundColor = .black
+        filamentView.engine.setClearColor(r: 0.0, g: 0.0, b: 0.0, a: 1.0)
+
+        // Set initial mode: Standard PBR
+        demoStepIndex = 0
+        setShadingMode(.standardPBR)
+
+        onDemoModeStateChanged?(true)
+        let total = Self.demoSteps.count
+        onDemoModeStepChanged?(0, total, "Standard PBR", "Full Window · Black Background")
+
+        // 3. After ~1s, turn alpha on
+        demoTimer?.invalidate()
+        let alphaTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window, self.isDemoModeActive else { return }
+                self.turnAlphaOnInDemo(window: window)
+            }
+        }
+        RunLoop.main.add(alphaTimer, forMode: .common)
+        demoTimer = alphaTimer
+    }
+
+    private func turnAlphaOnInDemo(window: NSWindow) {
+        filamentView.isTransparent = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        filamentView.engine.setClearColor(r: 0.0, g: 0.0, b: 0.0, a: 0.0)
+
+        let total = Self.demoSteps.count
+        onDemoModeStepChanged?(0, total, "Standard PBR", "Per-Pixel Alpha Transparent Mode Active")
+
+        // 4. Then every 2 seconds, cycle through all modes
+        demoStepIndex = 1
+        demoTimer?.invalidate()
+        let stepTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window, self.isDemoModeActive else { return }
+                self.advanceDemoStep(window: window)
+            }
+        }
+        RunLoop.main.add(stepTimer, forMode: .common)
+        demoTimer = stepTimer
+    }
+
+    private func advanceDemoStep(window: NSWindow) {
+        let total = Self.demoSteps.count
+        let step = Self.demoSteps[demoStepIndex]
+
+        setShadingMode(step.mode)
+
+        if let gradMode = step.outlineMode {
+            setOutlineGradientMode(gradMode)
+        }
+        if let speed = step.outlineSpeed {
+            setOutlineFlowSpeed(speed)
+        } else {
+            setOutlineFlowSpeed(0.0)
+        }
+        if let preset = step.halftonePreset {
+            applyHalftonePreset(preset)
+        }
+
+        onDemoModeStepChanged?(demoStepIndex, total, step.title, step.subtitle)
+        demoStepIndex = (demoStepIndex + 1) % total
+    }
+
+    func stopDemoMode(in window: NSWindow) {
+        guard isDemoModeActive else { return }
+        isDemoModeActive = false
+
+        demoTimer?.invalidate()
+        demoTimer = nil
+
+        // Restore camera
+        camera.lockAutoOrbit = false
+        camera.isAutoOrbiting = savedAutoOrbit
+        camera.setPose(
+            azimuth: savedAzimuth,
+            elevation: savedElevation,
+            distance: savedDistance,
+            target: savedTarget
+        )
+
+        // Restore transparency & background
+        filamentView.isTransparent = savedTransparency
+        window.isOpaque = savedWindowOpaque
+        window.backgroundColor = savedWindowBgColor ?? .windowBackgroundColor
+        setCanvasBackground(savedCanvasBackground)
+
+        // Restore animation state
+        isAnimationPlaying = savedAnimationPlaying
+
+        // Restore shading mode & outline settings
+        setShadingMode(savedShadingMode)
+        outlineMaterial?.flowAnimationSpeed = 0.0
+
+        onDemoModeStateChanged?(false)
+    }
+
     func updateViewport() {
         filamentView.updateViewport()
     }

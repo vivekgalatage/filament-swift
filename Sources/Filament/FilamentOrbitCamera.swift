@@ -23,6 +23,8 @@ public final class FilamentOrbitCamera {
 
     /// Optional turntable rotation when idle. Automatically disabled on manual mouse orbit/pan.
     public var isAutoOrbiting: Bool = false
+    /// When true, manual mouse movements will not disengage auto-orbiting.
+    public var lockAutoOrbit: Bool = false
 
     public var orbitSensitivity: Double = 0.007
     public var panSensitivity: Double = 0.0015
@@ -59,7 +61,7 @@ public final class FilamentOrbitCamera {
 
     /// Orbits the camera around `target` given pointer movement in pixels (`deltaX` right, `deltaY` down).
     public func orbit(deltaX: Double, deltaY: Double) {
-        isAutoOrbiting = false
+        if !lockAutoOrbit { isAutoOrbiting = false }
         azimuth -= deltaX * orbitSensitivity
         elevation = min(
             max(elevation + deltaY * orbitSensitivity, -Self.maxElevation),
@@ -70,7 +72,7 @@ public final class FilamentOrbitCamera {
 
     /// Pans `target` in the camera's local right/up plane given pointer movement in pixels (`deltaX` right, `deltaY` down).
     public func pan(deltaX: Double, deltaY: Double) {
-        isAutoOrbiting = false
+        if !lockAutoOrbit { isAutoOrbiting = false }
         let basis = cameraBasis()
         let scale = distance * panSensitivity
         let moveRight = -deltaX * scale
@@ -87,6 +89,26 @@ public final class FilamentOrbitCamera {
         guard delta != 0 else { return }
         let factor = pow(0.92, delta)
         distance = min(max(distance * factor, minDistance), maxDistance)
+        applyToEngine()
+    }
+
+    /// Explicitly sets the distance from target.
+    public func setDistance(_ newDistance: Double) {
+        distance = min(max(newDistance, minDistance), maxDistance)
+        applyToEngine()
+    }
+
+    /// Programmatically sets camera spherical angles, distance, and/or look-at target.
+    public func setPose(
+        azimuth: Double? = nil,
+        elevation: Double? = nil,
+        distance: Double? = nil,
+        target: (x: Double, y: Double, z: Double)? = nil
+    ) {
+        if let azimuth { self.azimuth = azimuth }
+        if let elevation { self.elevation = min(max(elevation, -Self.maxElevation), Self.maxElevation) }
+        if let distance { self.distance = min(max(distance, minDistance), maxDistance) }
+        if let target { self.target = target }
         applyToEngine()
     }
 
