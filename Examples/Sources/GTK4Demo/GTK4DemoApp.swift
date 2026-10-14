@@ -76,7 +76,7 @@ final class GTK4DemoApp {
 
         if let panelBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6) {
             gtk_scrolled_window_set_child(panelScroller, panelBox)
-            self.controlPanel = GTKControlPanel(controller: scene.controller, in: panelBox)
+            self.controlPanel = GTKControlPanel(scene: scene, in: panelBox)
         }
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -126,11 +126,13 @@ final class GTK4DemoApp {
         let openBtn = gtk_button_new_with_label("Open Model…")
         let resetCamBtn = gtk_button_new_with_label("Reset View")
         let animBtn = gtk_button_new_with_label("Cycle Anim")
+        let passthroughBtn = gtk_button_new_with_label("Click-Thru")
         let overlayBtn = gtk_button_new_with_label("Floating Overlay")
 
         gtk_header_bar_pack_start(headerBar, openBtn)
         gtk_header_bar_pack_start(headerBar, resetCamBtn)
         gtk_header_bar_pack_end(headerBar, overlayBtn)
+        gtk_header_bar_pack_end(headerBar, passthroughBtn)
         gtk_header_bar_pack_end(headerBar, animBtn)
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -155,6 +157,17 @@ final class GTK4DemoApp {
             MainActor.assumeIsolated { selfApp.scene?.cycleNextAnimation() }
         }
         g_signal_connect_data(animBtn, "clicked", unsafeBitCast(animClicked, to: (@convention(c) () -> Void).self), selfPtr, nil, 0)
+
+        let passthroughClicked: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
+            guard let userData else { return }
+            let selfApp = Unmanaged<GTK4DemoApp>.fromOpaque(userData).takeUnretainedValue()
+            MainActor.assumeIsolated {
+                guard let ov = selfApp.overlayWindow else { return }
+                ov.isClickThrough.toggle()
+                print("[GTK4Demo] Overlay click-through set to: \(ov.isClickThrough)")
+            }
+        }
+        g_signal_connect_data(passthroughBtn, "clicked", unsafeBitCast(passthroughClicked, to: (@convention(c) () -> Void).self), selfPtr, nil, 0)
 
         let overlayClicked: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
             guard let userData else { return }
@@ -254,6 +267,29 @@ final class GTK4DemoApp {
                 try overlay.loadModel(from: modelUrl)
             } catch {
                 print("[GTK4Demo] Failed to load model for overlay: \(error)")
+            }
+        }
+        if let scene {
+            overlay.setShadingMode(index: scene.currentShadingMode.rawValue)
+            overlay.setOutlineColor(r: scene.currentOutlineColor.r, g: scene.currentOutlineColor.g, b: scene.currentOutlineColor.b, a: 1.0)
+            if let outline = scene.outlineMaterial {
+                overlay.setOutlineThickness(outline.outlineThickness)
+                overlay.setOutlineGradientMode(outline.gradientMode)
+                overlay.setOutlineStops(outline.stops)
+                overlay.setOutlineGradientScale(outline.gradientScale)
+                overlay.setOutlineFlowSpeed(outline.flowAnimationSpeed)
+                overlay.setOutlineNoiseScale(outline.noiseScale)
+            }
+            if let toon = scene.toonMaterial {
+                overlay.setHalftoneMode(toon.halftoneMode)
+                overlay.setHalftoneTarget(toon.halftoneTarget)
+                overlay.setHalftoneScale(toon.halftoneScale)
+                overlay.setHalftoneAngle(toon.halftoneAngle)
+                overlay.setHalftoneDotSize(toon.halftoneDotSize)
+                overlay.setHalftoneHardness(toon.halftoneHardness)
+                overlay.setHalftoneBlend(toon.halftoneBlend)
+                overlay.setHalftoneDotColor(r: toon.halftoneDotColor.r, g: toon.halftoneDotColor.g, b: toon.halftoneDotColor.b, a: toon.halftoneDotColor.a)
+                overlay.setHalftonePaperColor(r: toon.halftonePaperColor.r, g: toon.halftonePaperColor.g, b: toon.halftonePaperColor.b, a: toon.halftonePaperColor.a)
             }
         }
         overlay.show()

@@ -44,6 +44,22 @@ final class ControlPanel {
     private var isSyncingAnimations = false
     private var isSyncingBackground = false
 
+    private var shadingCombo: ComboBox?
+    private var outlineGradientCombo: ComboBox?
+    private var outlineThicknessSlider: Slider?
+    private var outlineFlowSpeedSlider: Slider?
+    private var outlineGradientScaleSlider: Slider?
+    private var outlineNoiseScaleSlider: Slider?
+    private var halftonePresetCombo: ComboBox?
+    private var halftoneModeCombo: ComboBox?
+    private var halftoneTargetCombo: ComboBox?
+    private var halftoneScaleSlider: Slider?
+    private var halftoneAngleSlider: Slider?
+    private var halftoneDotSizeSlider: Slider?
+    private var halftoneHardnessSlider: Slider?
+    private var halftoneBlendSlider: Slider?
+    private var isSyncingStylized = false
+
     init(host: DemoHost) {
         self.host = host
         build()
@@ -76,6 +92,8 @@ final class ControlPanel {
 
         addSection("Model")
         addModelControls()
+
+        addStylizedSection()
 
         addSection("Lighting")
         addSlider(\.keyLightIntensity, "Key light", 0, 200_000)
@@ -359,6 +377,177 @@ final class ControlPanel {
         toggles.append(ToggleBinding(keyPath: keyPath, check: check))
     }
 
+    private func addStylizedSection() {
+        addSection("Stylized Shading & Ink")
+
+        let combo = ComboBox()
+        for mode in DemoHost.ShadingMode.allCases {
+            let item = ComboBoxItem()
+            item.content = mode.title
+            combo.items.append(item)
+        }
+        combo.selectedIndex = Int32(host.currentShadingMode.rawValue)
+        combo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingStylized else { return }
+                let idx = Int(combo.selectedIndex)
+                guard idx >= 0, idx < DemoHost.ShadingMode.allCases.count else { return }
+                self.host.setShadingMode(DemoHost.ShadingMode.allCases[idx])
+            }
+        }
+        root.children.append(combo)
+        self.shadingCombo = combo
+
+        // Inked Outlines
+        addSection("Inked Outline")
+
+        outlineThicknessSlider = addFloatSlider("Outline thickness", min: 0.001, max: 0.05, step: 0.001, initial: Double(host.outlineMaterial?.outlineThickness ?? 0.015)) { [weak self] val in
+            self?.host.setOutlineThickness(Float(val))
+        }
+
+        let gradCombo = ComboBox()
+        for mode in FilamentToonOutlineMaterial.GradientMode.allCases {
+            let item = ComboBoxItem()
+            item.content = mode.title
+            gradCombo.items.append(item)
+        }
+        gradCombo.selectedIndex = Int32(host.outlineMaterial?.gradientMode.rawValue ?? 0)
+        gradCombo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingStylized else { return }
+                let idx = Int(gradCombo.selectedIndex)
+                guard idx >= 0, idx < FilamentToonOutlineMaterial.GradientMode.allCases.count else { return }
+                self.host.setOutlineGradientMode(FilamentToonOutlineMaterial.GradientMode.allCases[idx])
+            }
+        }
+        root.children.append(gradCombo)
+        self.outlineGradientCombo = gradCombo
+
+        outlineFlowSpeedSlider = addFloatSlider("Flow animation speed", min: 0.0, max: 5.0, step: 0.1, initial: Double(host.outlineMaterial?.flowAnimationSpeed ?? 0.0)) { [weak self] val in
+            self?.host.setOutlineFlowSpeed(Float(val))
+        }
+
+        outlineGradientScaleSlider = addFloatSlider("Gradient frequency", min: 0.1, max: 10.0, step: 0.1, initial: Double(host.outlineMaterial?.gradientScale ?? 1.0)) { [weak self] val in
+            self?.host.setOutlineGradientScale(Float(val))
+        }
+
+        outlineNoiseScaleSlider = addFloatSlider("Noise distortion", min: 0.1, max: 20.0, step: 0.5, initial: Double(host.outlineMaterial?.noiseScale ?? 0.0)) { [weak self] val in
+            self?.host.setOutlineNoiseScale(Float(val))
+        }
+
+        let randBtn = Button()
+        randBtn.content = "Randomize Outline Colors"
+        randBtn.click.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.host.randomizeOutlineColors() }
+        }
+        root.children.append(randBtn)
+
+        // Halftone Section
+        addSection("Comic Halftone & Screentone")
+
+        let presetCombo = ComboBox()
+        let presets = ["Custom", "Spider-Verse Pop-Art", "Manga Screentone", "Vintage CMYK Newspaper", "Woodcut / Pen Hatching"]
+        for p in presets {
+            let item = ComboBoxItem()
+            item.content = p
+            presetCombo.items.append(item)
+        }
+        presetCombo.selectedIndex = 0
+        presetCombo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingStylized else { return }
+                switch presetCombo.selectedIndex {
+                case 1: self.host.applyHalftonePreset(FilamentToonMaterial.spiderVersePreset)
+                case 2: self.host.applyHalftonePreset(FilamentToonMaterial.mangaScreentonePreset)
+                case 3: self.host.applyHalftonePreset(FilamentToonMaterial.cmykNewspaperPreset)
+                case 4: self.host.applyHalftonePreset(FilamentToonMaterial.comicHatchingPreset)
+                default: break
+                }
+                self.syncStylizedUI()
+            }
+        }
+        root.children.append(presetCombo)
+        self.halftonePresetCombo = presetCombo
+
+        let modeCombo = ComboBox()
+        for mode in FilamentToonMaterial.HalftoneMode.allCases {
+            let item = ComboBoxItem()
+            item.content = mode.title
+            modeCombo.items.append(item)
+        }
+        modeCombo.selectedIndex = Int32(host.toonMaterial?.halftoneMode.rawValue ?? 0)
+        modeCombo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingStylized else { return }
+                let idx = Int(modeCombo.selectedIndex)
+                guard idx >= 0, idx < FilamentToonMaterial.HalftoneMode.allCases.count else { return }
+                self.host.setHalftoneMode(FilamentToonMaterial.HalftoneMode.allCases[idx])
+            }
+        }
+        root.children.append(modeCombo)
+        self.halftoneModeCombo = modeCombo
+
+        let targetCombo = ComboBox()
+        for target in FilamentToonMaterial.HalftoneTarget.allCases {
+            let item = ComboBoxItem()
+            item.content = target.title
+            targetCombo.items.append(item)
+        }
+        targetCombo.selectedIndex = Int32(host.toonMaterial?.halftoneTarget.rawValue ?? 0)
+        targetCombo.selectionChanged.addHandler { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingStylized else { return }
+                let idx = Int(targetCombo.selectedIndex)
+                guard idx >= 0, idx < FilamentToonMaterial.HalftoneTarget.allCases.count else { return }
+                self.host.setHalftoneTarget(FilamentToonMaterial.HalftoneTarget.allCases[idx])
+            }
+        }
+        root.children.append(targetCombo)
+        self.halftoneTargetCombo = targetCombo
+
+        halftoneScaleSlider = addFloatSlider("Dot frequency scale", min: 2.0, max: 120.0, step: 1.0, initial: Double(host.toonMaterial?.halftoneScale ?? 24.0)) { [weak self] val in
+            self?.host.setHalftoneScale(Float(val))
+        }
+
+        halftoneAngleSlider = addFloatSlider("Screen angle (°)", min: 0.0, max: 180.0, step: 1.0, initial: Double(host.toonMaterial?.halftoneAngle ?? 45.0)) { [weak self] val in
+            self?.host.setHalftoneAngle(Float(val))
+        }
+
+        halftoneDotSizeSlider = addFloatSlider("Dot radius", min: 0.1, max: 2.0, step: 0.05, initial: Double(host.toonMaterial?.halftoneDotSize ?? 1.0)) { [weak self] val in
+            self?.host.setHalftoneDotSize(Float(val))
+        }
+
+        halftoneHardnessSlider = addFloatSlider("Edge hardness", min: 0.0, max: 1.0, step: 0.01, initial: Double(host.toonMaterial?.halftoneHardness ?? 0.85)) { [weak self] val in
+            self?.host.setHalftoneHardness(Float(val))
+        }
+
+        halftoneBlendSlider = addFloatSlider("Effect blend", min: 0.0, max: 1.0, step: 0.01, initial: Double(host.toonMaterial?.halftoneBlend ?? 1.0)) { [weak self] val in
+            self?.host.setHalftoneBlend(Float(val))
+        }
+    }
+
+    @discardableResult
+    private func addFloatSlider(_ label: String, min: Double, max: Double, step: Double, initial: Double, onChange: @escaping (Double) -> Void) -> Slider {
+        let caption = TextBlock()
+        caption.text = label
+        root.children.append(caption)
+
+        let slider = Slider()
+        slider.minimum = min
+        slider.maximum = max
+        slider.stepFrequency = step
+        slider.value = initial
+
+        slider.valueChanged.addHandler { [weak self] _, args in
+            MainActor.assumeIsolated {
+                guard let self, !self.isSyncingStylized, let args else { return }
+                onChange(args.newValue)
+            }
+        }
+        root.children.append(slider)
+        return slider
+    }
+
     /// Pushes the host's current settings back into the widgets (after a reset).
     func syncFromSettings() {
         let settings = host.pbrSettings()
@@ -378,6 +567,32 @@ final class ControlPanel {
         }
         syncBackgroundUI()
         syncAutoOrbit()
+        syncStylizedUI()
+    }
+
+    func syncStylizedUI() {
+        isSyncingStylized = true
+        defer { isSyncingStylized = false }
+
+        if let shadingCombo {
+            shadingCombo.selectedIndex = Int32(host.currentShadingMode.rawValue)
+        }
+        if let outline = host.outlineMaterial {
+            outlineGradientCombo?.selectedIndex = Int32(outline.gradientMode.rawValue)
+            outlineThicknessSlider?.value = Double(outline.outlineThickness)
+            outlineFlowSpeedSlider?.value = Double(outline.flowAnimationSpeed)
+            outlineGradientScaleSlider?.value = Double(outline.gradientScale)
+            outlineNoiseScaleSlider?.value = Double(outline.noiseScale)
+        }
+        if let toon = host.toonMaterial {
+            halftoneModeCombo?.selectedIndex = Int32(toon.halftoneMode.rawValue)
+            halftoneTargetCombo?.selectedIndex = Int32(toon.halftoneTarget.rawValue)
+            halftoneScaleSlider?.value = Double(toon.halftoneScale)
+            halftoneAngleSlider?.value = Double(toon.halftoneAngle)
+            halftoneDotSizeSlider?.value = Double(toon.halftoneDotSize)
+            halftoneHardnessSlider?.value = Double(toon.halftoneHardness)
+            halftoneBlendSlider?.value = Double(toon.halftoneBlend)
+        }
     }
 
     func syncBackgroundUI() {

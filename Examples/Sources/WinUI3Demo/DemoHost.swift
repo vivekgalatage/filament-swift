@@ -140,9 +140,38 @@ final class DemoHost {
     // Filament.
     private(set) var engine: FilamentEngine!
     private(set) var model: FilamentModel!
+    private(set) var outlineModel: FilamentModel!
     private(set) var pbr: FilamentPBRController!
     private(set) var camera: FilamentOrbitCamera!
     private var hostView: FilamentWin32View?
+
+    public enum ShadingMode: Int, CaseIterable {
+        case standardPBR = 0
+        case toonCel = 1
+        case toonWithOutline = 2
+        case pbrWithOutline = 3
+        case outlineOnly = 4
+        case comicHalftone = 5
+        case halftoneWithOutline = 6
+
+        var title: String {
+            switch self {
+            case .standardPBR: return "Standard PBR"
+            case .toonCel: return "Toon Cel (Cartoon)"
+            case .toonWithOutline: return "Toon + Inked Outline"
+            case .pbrWithOutline: return "PBR + Inked Outline"
+            case .outlineOnly: return "Outline Only (Transparent Body)"
+            case .comicHalftone: return "Comic Halftone (Pop-Art / Manga)"
+            case .halftoneWithOutline: return "Halftone + Inked Outline"
+            }
+        }
+    }
+
+    public private(set) var currentShadingMode: ShadingMode = .standardPBR
+    public private(set) var currentOutlineColor: (r: Float, g: Float, b: Float) = (0.10, 0.08, 0.06)
+    public private(set) var toonMaterial: FilamentToonMaterial?
+    public private(set) var outlineMaterial: FilamentToonOutlineMaterial?
+    public private(set) var depthMaskMaterial: FilamentDepthMaskMaterial?
 
     // Model & animation state.
     private(set) var currentModelName: String?
@@ -191,6 +220,7 @@ final class DemoHost {
         engine = FilamentEngine(backend: .vulkan)
         pbr = FilamentPBRController(engine: engine)
         model = FilamentModel(engine: engine)
+        outlineModel = FilamentModel(engine: engine)
         camera = FilamentOrbitCamera(engine: engine)
     }
 
@@ -463,6 +493,14 @@ final class DemoHost {
                 animationTime = animationTime.truncatingRemainder(dividingBy: duration)
             }
             model.applyAnimation(time: animationTime)
+            if outlineModel.isLoaded && outlineModel.isVisible {
+                outlineModel.applyAnimation(time: animationTime)
+            }
+        }
+
+        if let out = outlineMaterial, out.flowAnimationSpeed != 0 {
+            let nextPhase = (out.gradientPhase + dt * out.flowAnimationSpeed).truncatingRemainder(dividingBy: 1.0)
+            out.gradientPhase = nextPhase >= 0 ? nextPhase : (nextPhase + 1.0)
         }
 
         camera.update(dt: dt)
@@ -472,6 +510,9 @@ final class DemoHost {
             overlay.camera.update(dt: dt)
             if overlay.model.hasAnimations {
                 overlay.model.applyAnimation(time: animationTime)
+                if overlay.outlineModel.isLoaded && overlay.outlineModel.isVisible {
+                    overlay.outlineModel.applyAnimation(time: animationTime)
+                }
             }
             overlay.renderFrame()
         }
@@ -491,6 +532,8 @@ final class DemoHost {
         hostView?.stopRendering()
         model?.unload()
         model = nil
+        outlineModel?.unload()
+        outlineModel = nil
         hostView = nil
         controlPanel = nil
         xamlSource = nil
@@ -506,16 +549,32 @@ final class DemoHost {
         do {
             try model.loadGlb(at: asset.url)
             currentModelName = asset.name
+            try outlineModel.loadGlb(at: asset.url)
+            outlineModel.setPriority(6)
+            model.setPriority(4)
+            ensureToonMaterials()
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setRotation(radiansY: 0)
+            if outlineModel.hasAnimations {
+                outlineModel.selectAnimation(at: 0)
+            }
             try? overlay?.loadModel(from: asset.url)
+            if let overlay {
+                overlay.setShadingMode(index: currentShadingMode.rawValue)
+            }
         } catch {
             print("[WinUI3Demo] Failed to load \(asset.url.path): \(error)")
             model.unload()
+            outlineModel.unload()
             currentModelName = nil
         }
         if model.hasAnimations {
             model.selectAnimation(at: 0)
         }
         model.setRotation(radiansY: 0)
+        applyCurrentShadingMode()
         controlPanel?.syncModelAndAnimations()
     }
 
@@ -531,6 +590,9 @@ final class DemoHost {
     func selectAnimation(at index: Int) {
         animationTime = 0
         model?.selectAnimation(at: index)
+        if outlineModel.isLoaded {
+            outlineModel.selectAnimation(at: index)
+        }
     }
 
     func pbrSettings() -> FilamentPBRSettings { pbr.settings }
@@ -543,6 +605,290 @@ final class DemoHost {
         overlay?.pbr.update(pbr.settings)
     }
 
+    // MARK: - Stylized Shading, Outline & Halftone Controls
+
+    func setShadingMode(_ mode: ShadingMode) {
+        currentShadingMode = mode
+        applyCurrentShadingMode()
+        overlay?.setShadingMode(index: mode.rawValue)
+    }
+
+    func setOutlineThickness(_ value: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineThickness = value
+        overlay?.setOutlineThickness(value)
+    }
+
+    func setOutlineColor(r: Float, g: Float, b: Float) {
+        currentOutlineColor = (r, g, b)
+        ensureToonMaterials()
+        outlineMaterial?.outlineColor = (r, g, b, 1.0)
+        overlay?.setOutlineColor(r: r, g: g, b: b, a: 1.0)
+    }
+
+    func setOutlineGradientMode(_ mode: FilamentToonOutlineMaterial.GradientMode) {
+        ensureToonMaterials()
+        outlineMaterial?.gradientMode = mode
+        overlay?.setOutlineGradientMode(mode)
+    }
+
+    func setOutlineStops(_ stops: [FilamentToonOutlineMaterial.GradientStop]) {
+        ensureToonMaterials()
+        outlineMaterial?.stops = stops
+        overlay?.setOutlineStops(stops)
+    }
+
+    func randomizeOutlineColors() {
+        ensureToonMaterials()
+        outlineMaterial?.randomizeColors()
+        if let stops = outlineMaterial?.stops {
+            overlay?.setOutlineStops(stops)
+        }
+    }
+
+    func setOutlineGradientScale(_ scale: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.gradientScale = scale
+        overlay?.setOutlineGradientScale(scale)
+    }
+
+    func setOutlineFlowSpeed(_ speed: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.flowAnimationSpeed = speed
+        overlay?.setOutlineFlowSpeed(speed)
+    }
+
+    func setOutlineNoiseScale(_ noise: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.noiseScale = noise
+        overlay?.setOutlineNoiseScale(noise)
+    }
+
+    func setHalftoneMode(_ mode: FilamentToonMaterial.HalftoneMode) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneMode = mode
+        overlay?.setHalftoneMode(mode)
+    }
+
+    func setHalftoneTarget(_ target: FilamentToonMaterial.HalftoneTarget) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneTarget = target
+        overlay?.setHalftoneTarget(target)
+    }
+
+    func setHalftoneScale(_ scale: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneScale = scale
+        overlay?.setHalftoneScale(scale)
+    }
+
+    func setHalftoneAngle(_ angle: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneAngle = angle
+        overlay?.setHalftoneAngle(angle)
+    }
+
+    func setHalftoneDotSize(_ size: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneDotSize = size
+        overlay?.setHalftoneDotSize(size)
+    }
+
+    func setHalftoneHardness(_ hardness: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneHardness = hardness
+        overlay?.setHalftoneHardness(hardness)
+    }
+
+    func setHalftoneBlend(_ blend: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneBlend = blend
+        overlay?.setHalftoneBlend(blend)
+    }
+
+    func setHalftoneDotColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneDotColor = (r, g, b, a)
+        overlay?.setHalftoneDotColor(r: r, g: g, b: b, a: a)
+    }
+
+    func setHalftonePaperColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureToonMaterials()
+        toonMaterial?.halftonePaperColor = (r, g, b, a)
+        overlay?.setHalftonePaperColor(r: r, g: g, b: b, a: a)
+    }
+
+    func applyHalftonePreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        ensureToonMaterials()
+        toonMaterial?.applyPreset(preset)
+        overlay?.applyHalftonePreset(preset)
+    }
+
+    private func applyCurrentShadingMode() {
+        guard let url = currentModelUrl else { return }
+        ensureToonMaterials()
+
+        switch currentShadingMode {
+        case .standardPBR:
+            outlineModel.setVisible(false)
+            do {
+                try model.loadGlb(at: url)
+                model.setRotation(radiansY: 0.0)
+                model.setPriority(4)
+                if model.hasAnimations {
+                    model.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            } catch {
+                print("[WinUI3Demo] Failed to reload PBR model: \(error)")
+            }
+
+        case .toonCel:
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+
+        case .toonWithOutline:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .pbrWithOutline:
+            do {
+                try model.loadGlb(at: url)
+                model.setRotation(radiansY: 0.0)
+                model.setPriority(4)
+                if model.hasAnimations {
+                    model.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            } catch {
+                print("[WinUI3Demo] Failed to reload PBR model: \(error)")
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .outlineOnly:
+            model.setPriority(4)
+            if let mask = depthMaskMaterial {
+                model.applyDepthMaskMaterial(mask)
+            }
+            model.setVisible(true)
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .comicHalftone:
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+
+        case .halftoneWithOutline:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+        }
+    }
+
+    private func ensureToonMaterials() {
+        guard toonMaterial == nil || outlineMaterial == nil || depthMaskMaterial == nil else { return }
+        let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let repoRoot = sourceDir.deletingLastPathComponent().deletingLastPathComponent()
+        let candidateDirs = [
+            repoRoot.appendingPathComponent("Resources/Materials", isDirectory: true),
+            repoRoot.appendingPathComponent("Examples/Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "Examples/Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "../Resources/Materials", isDirectory: true),
+        ]
+
+        for dir in candidateDirs {
+            let celURL = dir.appendingPathComponent("ToonCel.filamat")
+            let outURL = dir.appendingPathComponent("ToonOutline.filamat")
+            let maskURL = dir.appendingPathComponent("DepthMask.filamat")
+            if FileManager.default.fileExists(atPath: celURL.path) && toonMaterial == nil {
+                do {
+                    toonMaterial = try engine.createToonMaterial(from: celURL)
+                    toonMaterial?.syncWithDirectionalLight(direction: (0.2, -1.0, -0.6), color: (1.0, 0.98, 0.95))
+                    print("[WinUI3Demo] Loaded ToonCel material from \(celURL.path)")
+                } catch {
+                    print("[WinUI3Demo] Error loading ToonCel: \(error)")
+                }
+            }
+            if FileManager.default.fileExists(atPath: outURL.path) && outlineMaterial == nil {
+                do {
+                    let out = try engine.createOutlineMaterial(from: outURL)
+                    out.outlineColor = (currentOutlineColor.r, currentOutlineColor.g, currentOutlineColor.b, 1.0)
+                    outlineMaterial = out
+                    print("[WinUI3Demo] Loaded ToonOutline material from \(outURL.path)")
+                } catch {
+                    print("[WinUI3Demo] Error loading ToonOutline: \(error)")
+                }
+            }
+            if FileManager.default.fileExists(atPath: maskURL.path) && depthMaskMaterial == nil {
+                do {
+                    depthMaskMaterial = try engine.createDepthMaskMaterial(from: maskURL)
+                    print("[WinUI3Demo] Loaded DepthMask material from \(maskURL.path)")
+                } catch {
+                    print("[WinUI3Demo] Error loading DepthMask: \(error)")
+                }
+            }
+        }
+    }
+
     // MARK: - Floating Assistant Overlay
 
     func toggleAssistantOverlay() {
@@ -551,6 +897,27 @@ final class DemoHost {
             ov.pbr.update(pbr.settings)
             if let currentModelUrl {
                 try? ov.loadModel(from: currentModelUrl)
+            }
+            ov.setShadingMode(index: currentShadingMode.rawValue)
+            ov.setOutlineColor(r: currentOutlineColor.r, g: currentOutlineColor.g, b: currentOutlineColor.b, a: 1.0)
+            if let outline = outlineMaterial {
+                ov.setOutlineThickness(outline.outlineThickness)
+                ov.setOutlineGradientMode(outline.gradientMode)
+                ov.setOutlineStops(outline.stops)
+                ov.setOutlineGradientScale(outline.gradientScale)
+                ov.setOutlineFlowSpeed(outline.flowAnimationSpeed)
+                ov.setOutlineNoiseScale(outline.noiseScale)
+            }
+            if let toon = toonMaterial {
+                ov.setHalftoneMode(toon.halftoneMode)
+                ov.setHalftoneTarget(toon.halftoneTarget)
+                ov.setHalftoneScale(toon.halftoneScale)
+                ov.setHalftoneAngle(toon.halftoneAngle)
+                ov.setHalftoneDotSize(toon.halftoneDotSize)
+                ov.setHalftoneHardness(toon.halftoneHardness)
+                ov.setHalftoneBlend(toon.halftoneBlend)
+                ov.setHalftoneDotColor(r: toon.halftoneDotColor.r, g: toon.halftoneDotColor.g, b: toon.halftoneDotColor.b, a: toon.halftoneDotColor.a)
+                ov.setHalftonePaperColor(r: toon.halftonePaperColor.r, g: toon.halftonePaperColor.g, b: toon.halftonePaperColor.b, a: toon.halftonePaperColor.a)
             }
             ov.camera.isAutoOrbiting = true
             overlay = ov

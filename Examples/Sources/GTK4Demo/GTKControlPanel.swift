@@ -3,6 +3,12 @@ import Filament
 
 /// Identifies a single widget of the GTK 4 PBR control panel.
 enum PanelControl: Sendable {
+    // Stylized Shading & Ink
+    case shadingMode
+    // Outline controls
+    case outlineThickness, outlineGradientMode, outlineFlowSpeed, outlineGradientScale, outlineNoiseScale
+    // Halftone & Screentone
+    case halftonePreset, halftoneMode, halftoneTarget, halftoneScale, halftoneAngle, halftoneDotSize, halftoneHardness, halftoneBlend
     // Lighting
     case keyIntensity, fillIntensity, ambient, shadows
     // Tone mapping
@@ -16,20 +22,76 @@ enum PanelControl: Sendable {
     case depthOfField, depthOfFieldStrength
 }
 
-/// Builds and synchronizes the GTK 4 side panel driving `FilamentPBRController`.
+/// Builds and synchronizes the GTK 4 side panel driving `FilamentPBRController` and stylized rendering.
 @MainActor
 final class GTKControlPanel {
     private static let msaaOptions: [String] = ["1", "2", "4", "8"]
 
+    private let scene: GTKSceneController?
     private let controller: FilamentPBRController
     private var panelWidgets: [PanelControl: OpaquePointer] = [:]
 
-    init(controller: FilamentPBRController, in box: OpaquePointer) {
+    init(scene: GTKSceneController, in box: OpaquePointer) {
+        self.scene = scene
+        self.controller = scene.controller
+        build(in: box)
+    }
+
+    convenience init(controller: FilamentPBRController, in box: OpaquePointer) {
+        self.init(scene: nil, controller: controller, in: box)
+    }
+
+    init(scene: GTKSceneController?, controller: FilamentPBRController, in box: OpaquePointer) {
+        self.scene = scene
         self.controller = controller
         build(in: box)
     }
 
     private func build(in box: OpaquePointer) {
+        // Stylized Shading & Inked Outlines
+        addSectionHeader("Stylized Shading & Ink", to: box)
+        addDropdown(.shadingMode, label: "Style", items: GTKSceneController.ShadingMode.allCases.map(\.title), to: box)
+        addSeparator(to: box)
+
+        // Outline Controls
+        addSectionHeader("Inked Outline", to: box)
+        addSlider(.outlineThickness, label: "Outline thickness", range: 0.001...0.05, step: 0.001, to: box)
+        addDropdown(.outlineGradientMode, label: "Color mode", items: FilamentToonOutlineMaterial.GradientMode.allCases.map(\.title), to: box)
+        addSlider(.outlineFlowSpeed, label: "Flow animation speed", range: 0...5.0, step: 0.1, to: box)
+        addSlider(.outlineGradientScale, label: "Gradient frequency", range: 0.1...10.0, step: 0.1, to: box)
+        addSlider(.outlineNoiseScale, label: "Noise distortion", range: 0.1...20.0, step: 0.5, to: box)
+
+        let randBtn = gtk_button_new_with_label("Randomize Outline Colors")
+        gtk_widget_set_hexpand(randBtn, 1)
+        gtk_box_append(box, randBtn)
+        let randCallback: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?) -> Void = { _, userData in
+            guard let userData else { return }
+            let panel = Unmanaged<GTKControlPanel>.fromOpaque(userData).takeUnretainedValue()
+            MainActor.assumeIsolated { panel.scene?.randomizeOutlineColors() }
+        }
+        g_signal_connect_data(
+            randBtn,
+            "clicked",
+            unsafeBitCast(randCallback, to: (@convention(c) () -> Void).self),
+            Unmanaged.passUnretained(self).toOpaque(),
+            nil,
+            0
+        )
+        addSeparator(to: box)
+
+        // Comic Halftone & Screentone
+        addSectionHeader("Halftone & Screentone", to: box)
+        let halftonePresets = ["Custom", "Spider-Verse Pop-Art", "Manga Screentone", "Vintage CMYK Newspaper", "Woodcut / Pen Hatching"]
+        addDropdown(.halftonePreset, label: "Preset", items: halftonePresets, to: box)
+        addDropdown(.halftoneMode, label: "Pattern", items: FilamentToonMaterial.HalftoneMode.allCases.map(\.title), to: box)
+        addDropdown(.halftoneTarget, label: "Target zone", items: FilamentToonMaterial.HalftoneTarget.allCases.map(\.title), to: box)
+        addSlider(.halftoneScale, label: "Dot frequency scale", range: 2.0...120.0, step: 1.0, to: box)
+        addSlider(.halftoneAngle, label: "Screen angle (°)", range: 0...180.0, step: 1.0, to: box)
+        addSlider(.halftoneDotSize, label: "Dot radius", range: 0.1...2.0, step: 0.05, to: box)
+        addSlider(.halftoneHardness, label: "Edge hardness", range: 0...1.0, step: 0.01, to: box)
+        addSlider(.halftoneBlend, label: "Effect blend", range: 0...1.0, step: 0.01, to: box)
+        addSeparator(to: box)
+
         // Lighting
         addSectionHeader("Lighting", to: box)
         addSlider(.keyIntensity, label: "Key light", range: 0...200_000, step: 500, to: box)
@@ -211,6 +273,15 @@ final class GTKControlPanel {
         guard let control = control(forWidgetKey: widgetKey) else { return }
         let f = Float(value)
         switch control {
+        case .outlineThickness: scene?.setOutlineThickness(f)
+        case .outlineFlowSpeed: scene?.setOutlineFlowSpeed(f)
+        case .outlineGradientScale: scene?.setOutlineGradientScale(f)
+        case .outlineNoiseScale: scene?.setOutlineNoiseScale(f)
+        case .halftoneScale: scene?.setHalftoneScale(f)
+        case .halftoneAngle: scene?.setHalftoneAngle(f)
+        case .halftoneDotSize: scene?.setHalftoneDotSize(f)
+        case .halftoneHardness: scene?.setHalftoneHardness(f)
+        case .halftoneBlend: scene?.setHalftoneBlend(f)
         case .keyIntensity: controller.mutate { $0.keyLightIntensity = f }
         case .fillIntensity: controller.mutate { $0.fillLightIntensity = f }
         case .ambient: controller.mutate { $0.ambientIntensity = f }
@@ -247,6 +318,31 @@ final class GTKControlPanel {
         guard let control = control(forWidgetKey: widgetKey) else { return }
         let i = Int(index)
         switch control {
+        case .shadingMode:
+            let all = GTKSceneController.ShadingMode.allCases
+            guard i >= 0, i < all.count else { return }
+            scene?.setShadingMode(all[i])
+        case .outlineGradientMode:
+            let all = FilamentToonOutlineMaterial.GradientMode.allCases
+            guard i >= 0, i < all.count else { return }
+            scene?.setOutlineGradientMode(all[i])
+        case .halftonePreset:
+            switch i {
+            case 1: scene?.applyHalftonePreset(FilamentToonMaterial.spiderVersePreset)
+            case 2: scene?.applyHalftonePreset(FilamentToonMaterial.mangaScreentonePreset)
+            case 3: scene?.applyHalftonePreset(FilamentToonMaterial.cmykNewspaperPreset)
+            case 4: scene?.applyHalftonePreset(FilamentToonMaterial.comicHatchingPreset)
+            default: break
+            }
+            syncStylizedWidgets()
+        case .halftoneMode:
+            let all = FilamentToonMaterial.HalftoneMode.allCases
+            guard i >= 0, i < all.count else { return }
+            scene?.setHalftoneMode(all[i])
+        case .halftoneTarget:
+            let all = FilamentToonMaterial.HalftoneTarget.allCases
+            guard i >= 0, i < all.count else { return }
+            scene?.setHalftoneTarget(all[i])
         case .toneMapping:
             let all = FilamentToneMapping.allCases
             guard i >= 0, i < all.count else { return }
@@ -329,6 +425,55 @@ final class GTKControlPanel {
         if let dropdown = panelWidgets[.msaa] {
             let index = Self.msaaOptions.firstIndex(where: { (Int($0) ?? 1) == settings.multiSampleCount }) ?? 0
             gtk_drop_down_set_selected(dropdown, UInt32(index))
+        }
+
+        syncStylizedWidgets()
+    }
+
+    private func syncStylizedWidgets() {
+        guard let scene else { return }
+        if let dd = panelWidgets[.shadingMode] {
+            gtk_drop_down_set_selected(dd, UInt32(scene.currentShadingMode.rawValue))
+        }
+        if let outline = scene.outlineMaterial {
+            if let dd = panelWidgets[.outlineGradientMode] {
+                gtk_drop_down_set_selected(dd, UInt32(outline.gradientMode.rawValue))
+            }
+            if let scale = panelWidgets[.outlineThickness] {
+                gtk_range_set_value(scale, Double(outline.outlineThickness))
+            }
+            if let scale = panelWidgets[.outlineFlowSpeed] {
+                gtk_range_set_value(scale, Double(outline.flowAnimationSpeed))
+            }
+            if let scale = panelWidgets[.outlineGradientScale] {
+                gtk_range_set_value(scale, Double(outline.gradientScale))
+            }
+            if let scale = panelWidgets[.outlineNoiseScale] {
+                gtk_range_set_value(scale, Double(outline.noiseScale))
+            }
+        }
+        if let toon = scene.toonMaterial {
+            if let dd = panelWidgets[.halftoneMode] {
+                gtk_drop_down_set_selected(dd, UInt32(toon.halftoneMode.rawValue))
+            }
+            if let dd = panelWidgets[.halftoneTarget] {
+                gtk_drop_down_set_selected(dd, UInt32(toon.halftoneTarget.rawValue))
+            }
+            if let scale = panelWidgets[.halftoneScale] {
+                gtk_range_set_value(scale, Double(toon.halftoneScale))
+            }
+            if let scale = panelWidgets[.halftoneAngle] {
+                gtk_range_set_value(scale, Double(toon.halftoneAngle))
+            }
+            if let scale = panelWidgets[.halftoneDotSize] {
+                gtk_range_set_value(scale, Double(toon.halftoneDotSize))
+            }
+            if let scale = panelWidgets[.halftoneHardness] {
+                gtk_range_set_value(scale, Double(toon.halftoneHardness))
+            }
+            if let scale = panelWidgets[.halftoneBlend] {
+                gtk_range_set_value(scale, Double(toon.halftoneBlend))
+            }
         }
     }
 }

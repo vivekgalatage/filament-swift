@@ -302,7 +302,15 @@ public final class FilamentOverlayWindow {
     public let engine: FilamentEngine
     public let pbr: FilamentPBRController
     public let model: FilamentModel
+    public let outlineModel: FilamentModel
     public let camera: FilamentOrbitCamera
+
+    public private(set) var currentModelURL: URL?
+    public private(set) var toonMaterial: FilamentToonMaterial?
+    public private(set) var outlineMaterial: FilamentToonOutlineMaterial?
+    public private(set) var depthMaskMaterial: FilamentDepthMaskMaterial?
+    public private(set) var currentShadingMode: Int = 0
+    public private(set) var currentOutlineColor: (r: Float, g: Float, b: Float) = (0.10, 0.08, 0.06)
 
     public var xid: UInt { storage.xid }
     public let width: UInt32
@@ -356,6 +364,7 @@ public final class FilamentOverlayWindow {
         self.engine = eng
         self.pbr = FilamentPBRController(engine: eng)
         self.model = FilamentModel(engine: eng)
+        self.outlineModel = FilamentModel(engine: eng)
         self.camera = FilamentOrbitCamera(engine: eng)
 
         let pixelCount = Int(self.width * self.height * 4)
@@ -708,6 +717,14 @@ public final class FilamentOverlayWindow {
                 animationTime = animationTime.truncatingRemainder(dividingBy: dur)
             }
             model.applyAnimation(time: animationTime)
+            if outlineModel.isLoaded && outlineModel.isVisible {
+                outlineModel.applyAnimation(time: animationTime)
+            }
+        }
+
+        if let out = outlineMaterial, out.flowAnimationSpeed != 0 {
+            let nextPhase = (out.gradientPhase + dt * out.flowAnimationSpeed).truncatingRemainder(dividingBy: 1.0)
+            out.gradientPhase = nextPhase >= 0 ? nextPhase : (nextPhase + 1.0)
         }
 
         camera.update(dt: dt)
@@ -774,22 +791,250 @@ public final class FilamentOverlayWindow {
         return true
     }
 
-    // MARK: - Model & Blend Shapes
+    // MARK: - Model, Shading & Halftone Controls
 
     public func loadModel(from url: URL) throws {
+        self.currentModelURL = url
         try model.loadGlb(at: url)
         model.setRotation(radiansY: 0)
+        model.setPriority(4)
         if model.hasAnimations {
             model.selectAnimation(at: 0)
         }
+
+        try? outlineModel.loadGlb(at: url)
+        outlineModel.setRotation(radiansY: 0)
+        outlineModel.setPriority(6)
+        if outlineModel.hasAnimations {
+            outlineModel.selectAnimation(at: 0)
+        }
+
+        ensureMaterials()
+        applyShadingMode()
     }
 
     public func setBlendShape(name: String, weight: Float) {
         model.setBlendShape(name: name, weight: weight)
+        if outlineModel.isLoaded {
+            outlineModel.setBlendShape(name: name, weight: weight)
+        }
     }
 
     public func setBlendShape(index: Int, weight: Float) {
         model.setBlendShape(index: index, weight: weight)
+        if outlineModel.isLoaded {
+            outlineModel.setBlendShape(index: index, weight: weight)
+        }
+    }
+
+    public func setShadingMode(index: Int) {
+        currentShadingMode = index
+        applyShadingMode()
+    }
+
+    public func setOutlineColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        currentOutlineColor = (r, g, b)
+        ensureMaterials()
+        outlineMaterial?.outlineColor = (r, g, b, a)
+    }
+
+    public func setOutlineThickness(_ thickness: Float) {
+        ensureMaterials()
+        outlineMaterial?.outlineThickness = thickness
+    }
+
+    public func setOutlineGradientMode(_ mode: FilamentToonOutlineMaterial.GradientMode) {
+        ensureMaterials()
+        outlineMaterial?.gradientMode = mode
+    }
+
+    public func setOutlineStops(_ stops: [FilamentToonOutlineMaterial.GradientStop]) {
+        ensureMaterials()
+        outlineMaterial?.stops = stops
+    }
+
+    public func setOutlineGradientScale(_ scale: Float) {
+        ensureMaterials()
+        outlineMaterial?.gradientScale = scale
+    }
+
+    public func setOutlineGradientPhase(_ phase: Float) {
+        ensureMaterials()
+        outlineMaterial?.gradientPhase = phase
+    }
+
+    public func setOutlineFlowSpeed(_ speed: Float) {
+        ensureMaterials()
+        outlineMaterial?.flowAnimationSpeed = speed
+    }
+
+    public func setOutlineNoiseScale(_ noise: Float) {
+        ensureMaterials()
+        outlineMaterial?.noiseScale = noise
+    }
+
+    public func setHalftoneMode(_ mode: FilamentToonMaterial.HalftoneMode) {
+        ensureMaterials()
+        toonMaterial?.halftoneMode = mode
+    }
+
+    public func setHalftoneTarget(_ target: FilamentToonMaterial.HalftoneTarget) {
+        ensureMaterials()
+        toonMaterial?.halftoneTarget = target
+    }
+
+    public func setHalftoneScale(_ scale: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneScale = scale
+    }
+
+    public func setHalftoneAngle(_ angle: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneAngle = angle
+    }
+
+    public func setHalftoneDotSize(_ size: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneDotSize = size
+    }
+
+    public func setHalftoneHardness(_ hardness: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneHardness = hardness
+    }
+
+    public func setHalftoneBlend(_ blend: Float) {
+        ensureMaterials()
+        toonMaterial?.halftoneBlend = blend
+    }
+
+    public func setHalftoneDotColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureMaterials()
+        toonMaterial?.halftoneDotColor = (r, g, b, a)
+    }
+
+    public func setHalftonePaperColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureMaterials()
+        toonMaterial?.halftonePaperColor = (r, g, b, a)
+    }
+
+    public func applyHalftonePreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        ensureMaterials()
+        toonMaterial?.applyPreset(preset)
+    }
+
+    private func applyShadingMode() {
+        guard let url = currentModelURL else { return }
+        ensureMaterials()
+
+        switch currentShadingMode {
+        case 0: // Standard PBR
+            outlineModel.setVisible(false)
+            try? model.loadGlb(at: url)
+            model.setRotation(radiansY: 0.0)
+            model.setPriority(4)
+            if model.hasAnimations {
+                model.selectAnimation(at: 0)
+            }
+
+        case 1: // Toon Cel
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+
+        case 2: // Toon + Outline
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case 3: // PBR + Outline
+            try? model.loadGlb(at: url)
+            model.setRotation(radiansY: 0.0)
+            model.setPriority(4)
+            if model.hasAnimations {
+                model.selectAnimation(at: 0)
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case 4: // Outline Only (Transparent Body)
+            model.setPriority(4)
+            if let mask = depthMaskMaterial {
+                model.applyDepthMaskMaterial(mask)
+            }
+            model.setVisible(true)
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case 5: // Comic Halftone (Pop-Art / Manga)
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+
+        case 6: // Halftone + Inked Outline
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        default: break
+        }
+    }
+
+    private func ensureMaterials() {
+        guard toonMaterial == nil || outlineMaterial == nil || depthMaskMaterial == nil else { return }
+        let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let repoRoot = sourceDir.deletingLastPathComponent().deletingLastPathComponent()
+        let candidateDirs = [
+            repoRoot.appendingPathComponent("Resources/Materials", isDirectory: true),
+            repoRoot.appendingPathComponent("Examples/Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "Examples/Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "../Resources/Materials", isDirectory: true),
+        ]
+
+        for dir in candidateDirs {
+            let celURL = dir.appendingPathComponent("ToonCel.filamat")
+            let outURL = dir.appendingPathComponent("ToonOutline.filamat")
+            let maskURL = dir.appendingPathComponent("DepthMask.filamat")
+            if FileManager.default.fileExists(atPath: celURL.path) && toonMaterial == nil {
+                toonMaterial = try? engine.createToonMaterial(from: celURL)
+                toonMaterial?.syncWithDirectionalLight(direction: (0.2, -1.0, -0.6), color: (1.0, 0.98, 0.95))
+            }
+            if FileManager.default.fileExists(atPath: outURL.path) && outlineMaterial == nil {
+                outlineMaterial = try? engine.createOutlineMaterial(from: outURL)
+            }
+            if FileManager.default.fileExists(atPath: maskURL.path) && depthMaskMaterial == nil {
+                depthMaskMaterial = try? engine.createDepthMaskMaterial(from: maskURL)
+            }
+        }
     }
 }
 

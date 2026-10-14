@@ -9,7 +9,36 @@ final class GTKSceneController {
     let hostView: FilamentGTKView
     let controller: FilamentPBRController
     let model: FilamentModel
+    let outlineModel: FilamentModel
     let camera: FilamentOrbitCamera
+
+    public enum ShadingMode: Int, CaseIterable {
+        case standardPBR = 0
+        case toonCel = 1
+        case toonWithOutline = 2
+        case pbrWithOutline = 3
+        case outlineOnly = 4
+        case comicHalftone = 5
+        case halftoneWithOutline = 6
+
+        var title: String {
+            switch self {
+            case .standardPBR: return "Standard PBR"
+            case .toonCel: return "Toon Cel (Cartoon)"
+            case .toonWithOutline: return "Toon + Inked Outline"
+            case .pbrWithOutline: return "PBR + Inked Outline"
+            case .outlineOnly: return "Outline Only (Transparent Body)"
+            case .comicHalftone: return "Comic Halftone (Pop-Art / Manga)"
+            case .halftoneWithOutline: return "Halftone + Inked Outline"
+            }
+        }
+    }
+
+    public private(set) var currentShadingMode: ShadingMode = .standardPBR
+    public private(set) var currentOutlineColor: (r: Float, g: Float, b: Float) = (0.10, 0.08, 0.06)
+    public private(set) var toonMaterial: FilamentToonMaterial?
+    public private(set) var outlineMaterial: FilamentToonOutlineMaterial?
+    public private(set) var depthMaskMaterial: FilamentDepthMaskMaterial?
 
     private var animationTime: Float = 0.0
     private var isAnimationPlaying: Bool = true
@@ -32,6 +61,7 @@ final class GTKSceneController {
         self.hostView = view
         self.controller = FilamentPBRController(engine: view.engine)
         self.model = FilamentModel(engine: view.engine)
+        self.outlineModel = FilamentModel(engine: view.engine)
         self.camera = FilamentOrbitCamera(engine: view.engine)
 
         let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -106,9 +136,21 @@ final class GTKSceneController {
         do {
             try model.loadGlb(at: asset.url)
             print("[GTK4Demo] Loaded model: \(asset.name)")
+            try outlineModel.loadGlb(at: asset.url)
+            outlineModel.setPriority(6)
+            model.setPriority(4)
+            ensureToonMaterials()
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setRotation(radiansY: 0.0)
+            if outlineModel.hasAnimations {
+                outlineModel.selectAnimation(at: 0)
+            }
         } catch {
             print("[GTK4Demo] Failed to load \(asset.url.path): \(error)")
             model.unload()
+            outlineModel.unload()
         }
 
         if model.hasAnimations {
@@ -117,6 +159,7 @@ final class GTKSceneController {
         }
 
         model.setRotation(radiansY: 0.0)
+        applyCurrentShadingMode()
     }
 
     func cycleNextAnimation() {
@@ -124,6 +167,9 @@ final class GTKSceneController {
         let currentIdx = model.activeAnimationIndex ?? 0
         let nextIdx = (currentIdx + 1) % model.animations.count
         model.selectAnimation(at: nextIdx)
+        if outlineModel.isLoaded {
+            outlineModel.selectAnimation(at: nextIdx)
+        }
         animationTime = 0.0
         print("[GTK4Demo] Active animation: \(model.animations[nextIdx].name)")
     }
@@ -155,6 +201,270 @@ final class GTKSceneController {
         camera.reset()
     }
 
+    // MARK: - Toon, Outline & Halftone Controls
+
+    func setShadingMode(_ mode: ShadingMode) {
+        currentShadingMode = mode
+        applyCurrentShadingMode()
+    }
+
+    func setOutlineThickness(_ value: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineThickness = value
+    }
+
+    func setOutlineColor(r: Float, g: Float, b: Float) {
+        currentOutlineColor = (r, g, b)
+        ensureToonMaterials()
+        outlineMaterial?.outlineColor = (r, g, b, 1.0)
+    }
+
+    func setOutlineGradientMode(_ mode: FilamentToonOutlineMaterial.GradientMode) {
+        ensureToonMaterials()
+        outlineMaterial?.gradientMode = mode
+    }
+
+    func setOutlineStops(_ stops: [FilamentToonOutlineMaterial.GradientStop]) {
+        ensureToonMaterials()
+        outlineMaterial?.stops = stops
+    }
+
+    func randomizeOutlineColors() {
+        ensureToonMaterials()
+        outlineMaterial?.randomizeColors()
+    }
+
+    func setOutlineGradientScale(_ scale: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.gradientScale = scale
+    }
+
+    func setOutlineFlowSpeed(_ speed: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.flowAnimationSpeed = speed
+    }
+
+    func setOutlineNoiseScale(_ noise: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.noiseScale = noise
+    }
+
+    func setHalftoneMode(_ mode: FilamentToonMaterial.HalftoneMode) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneMode = mode
+    }
+
+    func setHalftoneTarget(_ target: FilamentToonMaterial.HalftoneTarget) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneTarget = target
+    }
+
+    func setHalftoneScale(_ scale: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneScale = scale
+    }
+
+    func setHalftoneAngle(_ angle: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneAngle = angle
+    }
+
+    func setHalftoneDotSize(_ size: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneDotSize = size
+    }
+
+    func setHalftoneHardness(_ hardness: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneHardness = hardness
+    }
+
+    func setHalftoneBlend(_ blend: Float) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneBlend = blend
+    }
+
+    func setHalftoneDotColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureToonMaterials()
+        toonMaterial?.halftoneDotColor = (r, g, b, a)
+    }
+
+    func setHalftonePaperColor(r: Float, g: Float, b: Float, a: Float = 1.0) {
+        ensureToonMaterials()
+        toonMaterial?.halftonePaperColor = (r, g, b, a)
+    }
+
+    func applyHalftonePreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        ensureToonMaterials()
+        toonMaterial?.applyPreset(preset)
+    }
+
+    private func applyCurrentShadingMode() {
+        guard let url = activeModelUrl else { return }
+        ensureToonMaterials()
+
+        switch currentShadingMode {
+        case .standardPBR:
+            outlineModel.setVisible(false)
+            do {
+                try model.loadGlb(at: url)
+                model.setRotation(radiansY: 0.0)
+                model.setPriority(4)
+                if model.hasAnimations {
+                    model.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            } catch {
+                print("[GTK4Demo] Failed to reload PBR model: \(error)")
+            }
+
+        case .toonCel:
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+
+        case .toonWithOutline:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                model.applyToonMaterial(toon)
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .pbrWithOutline:
+            do {
+                try model.loadGlb(at: url)
+                model.setRotation(radiansY: 0.0)
+                model.setPriority(4)
+                if model.hasAnimations {
+                    model.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            } catch {
+                print("[GTK4Demo] Failed to reload PBR model: \(error)")
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .outlineOnly:
+            model.setPriority(4)
+            if let mask = depthMaskMaterial {
+                model.applyDepthMaskMaterial(mask)
+            }
+            model.setVisible(true)
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case .comicHalftone:
+            outlineModel.setVisible(false)
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+
+        case .halftoneWithOutline:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                if toon.halftoneMode == .disabled {
+                    toon.halftoneMode = .screenDots
+                }
+                model.applyToonMaterial(toon)
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+        }
+    }
+
+    private func ensureToonMaterials() {
+        guard toonMaterial == nil || outlineMaterial == nil || depthMaskMaterial == nil else { return }
+        let engine = hostView.engine
+        let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let repoRoot = sourceDir.deletingLastPathComponent().deletingLastPathComponent()
+        let candidateDirs = [
+            repoRoot.appendingPathComponent("Resources/Materials", isDirectory: true),
+            repoRoot.appendingPathComponent("Examples/Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "Examples/Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "Resources/Materials", isDirectory: true),
+            URL(fileURLWithPath: "../Resources/Materials", isDirectory: true),
+        ]
+
+        for dir in candidateDirs {
+            let celURL = dir.appendingPathComponent("ToonCel.filamat")
+            let outURL = dir.appendingPathComponent("ToonOutline.filamat")
+            let maskURL = dir.appendingPathComponent("DepthMask.filamat")
+            if FileManager.default.fileExists(atPath: celURL.path) && toonMaterial == nil {
+                do {
+                    toonMaterial = try engine.createToonMaterial(from: celURL)
+                    toonMaterial?.syncWithDirectionalLight(direction: (0.2, -1.0, -0.6), color: (1.0, 0.98, 0.95))
+                    print("[GTK4Demo] Loaded ToonCel material from \(celURL.path)")
+                } catch {
+                    print("[GTK4Demo] Error loading ToonCel: \(error)")
+                }
+            }
+            if FileManager.default.fileExists(atPath: outURL.path) && outlineMaterial == nil {
+                do {
+                    let out = try engine.createOutlineMaterial(from: outURL)
+                    out.outlineColor = (currentOutlineColor.r, currentOutlineColor.g, currentOutlineColor.b, 1.0)
+                    outlineMaterial = out
+                    print("[GTK4Demo] Loaded ToonOutline material from \(outURL.path)")
+                } catch {
+                    print("[GTK4Demo] Error loading ToonOutline: \(error)")
+                }
+            }
+            if FileManager.default.fileExists(atPath: maskURL.path) && depthMaskMaterial == nil {
+                do {
+                    depthMaskMaterial = try engine.createDepthMaskMaterial(from: maskURL)
+                    print("[GTK4Demo] Loaded DepthMask material from \(maskURL.path)")
+                } catch {
+                    print("[GTK4Demo] Error loading DepthMask: \(error)")
+                }
+            }
+        }
+    }
+
     // MARK: - Frame Tick & Teardown
 
     func onFrameTick() {
@@ -182,6 +492,14 @@ final class GTKSceneController {
                 animationTime = animationTime.truncatingRemainder(dividingBy: dur)
             }
             model.applyAnimation(time: animationTime)
+            if outlineModel.isLoaded && outlineModel.isVisible {
+                outlineModel.applyAnimation(time: animationTime)
+            }
+        }
+
+        if let out = outlineMaterial, out.flowAnimationSpeed != 0 {
+            let nextPhase = (out.gradientPhase + dt * out.flowAnimationSpeed).truncatingRemainder(dividingBy: 1.0)
+            out.gradientPhase = nextPhase >= 0 ? nextPhase : (nextPhase + 1.0)
         }
 
         camera.update(dt: dt)
@@ -233,6 +551,7 @@ final class GTKSceneController {
     func shutdown() {
         hostView.stopRendering()
         model.unload()
+        outlineModel.unload()
         drawingArea = nil
     }
 }
