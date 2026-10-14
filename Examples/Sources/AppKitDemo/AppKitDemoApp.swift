@@ -260,6 +260,9 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         scene.onDemoModeStateChanged = { [weak self] active in
             self?.updateDemoModeUI(active: active)
         }
+        scene.onDemoTurntableToggled = { [weak self] enabled in
+            self?.demoHUD?.setTurntableState(enabled: enabled)
+        }
         scene.onDemoModeStepChanged = { [weak self] stepIndex, total, title, subtitle in
             self?.demoHUD?.update(step: stepIndex + 1, total: total, title: title, subtitle: subtitle)
         }
@@ -405,6 +408,9 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
                 if chars == "d" {
                     self.toggleDemoMode()
                     return nil
+                } else if chars == "r" && self.scene?.isDemoModeActive == true {
+                    self.toggleDemoTurntable()
+                    return nil
                 } else if chars == "h" && self.scene?.isDemoModeActive == true {
                     if let hud = self.demoHUD {
                         hud.isHidden.toggle()
@@ -419,6 +425,12 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     @objc func toggleDemoMode() {
         guard let window, let scene else { return }
         _ = scene.toggleDemoMode(in: window)
+    }
+
+    @objc func toggleDemoTurntable() {
+        guard let scene, scene.isDemoModeActive else { return }
+        let enabled = scene.toggleDemoTurntable()
+        demoHUD?.setTurntableState(enabled: enabled)
     }
 
     func stopDemoMode() {
@@ -449,6 +461,10 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
                 hud.onExitRequested = { [weak self] in
                     self?.stopDemoMode()
                 }
+                hud.onTurntableToggleRequested = { [weak self] in
+                    self?.toggleDemoTurntable()
+                }
+                hud.setTurntableState(enabled: scene.isDemoTurntableEnabled)
                 hud.present(in: contentView)
                 demoHUD = hud
             }

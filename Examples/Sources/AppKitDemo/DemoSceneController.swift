@@ -630,6 +630,19 @@ final class DemoSceneController {
 
     // MARK: - Demo Mode (Product Video Reel)
 
+    public enum DemoCameraMove: Sendable {
+        /// Subtle organic breathing / floating motion (gentle harmonic sway and slow dolly)
+        case subtleBreathing
+        /// Slow cinematic dolly push-in (dramatic zoom towards details)
+        case slowDollyIn(speed: Double)
+        /// Slow cinematic pull-back (revealing the full silhouette)
+        case slowDollyOut(speed: Double)
+        /// Slow orbital drift along azimuth (smooth cinematic pan around the model)
+        case slowPan(speed: Double)
+        /// Dynamic arc sweep (azimuth and elevation curved sweep)
+        case arcSweep(speed: Double)
+    }
+
     public struct DemoStep: Sendable {
         public let title: String
         public let subtitle: String
@@ -637,11 +650,24 @@ final class DemoSceneController {
         public let outlineMode: FilamentToonOutlineMaterial.GradientMode?
         public let outlineSpeed: Float?
         public let halftonePreset: FilamentToonMaterial.HalftonePreset?
+        public let duration: TimeInterval
+        public let initialAzimuth: Double
+        public let initialElevation: Double
+        public let initialDistance: Double
+        public let cameraMove: DemoCameraMove
     }
 
     public private(set) var isDemoModeActive: Bool = false
+    public private(set) var isDemoTurntableEnabled: Bool = false
     private var demoTimer: Timer?
     private var demoStepIndex: Int = 0
+
+    // Dynamic camera choreography
+    private var stepStartTime: Double = 0.0
+    private var currentStepBaseAzimuth: Double = 0.0
+    private var currentStepBaseElevation: Double = 0.12
+    private var currentStepBaseDistance: Double = 10.5
+    private var currentCameraMove: DemoCameraMove = .subtleBreathing
 
     // Saved state for restoring when demo mode exits
     private var savedTransparency: Bool = false
@@ -656,6 +682,7 @@ final class DemoSceneController {
     private var savedTarget: (x: Double, y: Double, z: Double) = (0.0, 0.0, 0.0)
     private var savedAnimationPlaying: Bool = true
 
+    public var onDemoTurntableToggled: ((Bool) -> Void)?
     public var onDemoModeStateChanged: ((Bool) -> Void)?
     public var onDemoModeStepChanged: ((Int, Int, String, String) -> Void)?
 
@@ -666,7 +693,12 @@ final class DemoSceneController {
             mode: .standardPBR,
             outlineMode: nil,
             outlineSpeed: nil,
-            halftonePreset: nil
+            halftonePreset: nil,
+            duration: 2.8,
+            initialAzimuth: 0.0,
+            initialElevation: 0.12,
+            initialDistance: 10.5,
+            cameraMove: .subtleBreathing
         ),
         DemoStep(
             title: "Toon Cel (Cartoon)",
@@ -674,7 +706,12 @@ final class DemoSceneController {
             mode: .toonCel,
             outlineMode: nil,
             outlineSpeed: nil,
-            halftonePreset: nil
+            halftonePreset: nil,
+            duration: 1.8,
+            initialAzimuth: 0.45,
+            initialElevation: 0.16,
+            initialDistance: 9.4,
+            cameraMove: .slowPan(speed: 0.14)
         ),
         DemoStep(
             title: "Toon + Inked Outline",
@@ -682,7 +719,12 @@ final class DemoSceneController {
             mode: .toonWithOutline,
             outlineMode: .solid,
             outlineSpeed: 0.0,
-            halftonePreset: nil
+            halftonePreset: nil,
+            duration: 2.4,
+            initialAzimuth: -0.50,
+            initialElevation: -0.06,
+            initialDistance: 8.8,
+            cameraMove: .slowDollyIn(speed: 0.35)
         ),
         DemoStep(
             title: "PBR + Inked Outline",
@@ -690,7 +732,12 @@ final class DemoSceneController {
             mode: .pbrWithOutline,
             outlineMode: .solid,
             outlineSpeed: 0.0,
-            halftonePreset: nil
+            halftonePreset: nil,
+            duration: 1.9,
+            initialAzimuth: 0.75,
+            initialElevation: 0.20,
+            initialDistance: 9.6,
+            cameraMove: .arcSweep(speed: 0.12)
         ),
         DemoStep(
             title: "Outline Only (Transparent Body)",
@@ -698,7 +745,12 @@ final class DemoSceneController {
             mode: .outlineOnly,
             outlineMode: .solid,
             outlineSpeed: 0.0,
-            halftonePreset: nil
+            halftonePreset: nil,
+            duration: 2.6,
+            initialAzimuth: 0.15,
+            initialElevation: 0.04,
+            initialDistance: 8.2,
+            cameraMove: .slowDollyIn(speed: 0.30)
         ),
         DemoStep(
             title: "Comic Halftone (Spider-Verse Pop-Art)",
@@ -706,7 +758,12 @@ final class DemoSceneController {
             mode: .comicHalftone,
             outlineMode: nil,
             outlineSpeed: nil,
-            halftonePreset: FilamentToonMaterial.spiderVersePreset
+            halftonePreset: FilamentToonMaterial.spiderVersePreset,
+            duration: 2.5,
+            initialAzimuth: -0.38,
+            initialElevation: 0.14,
+            initialDistance: 9.6,
+            cameraMove: .subtleBreathing
         ),
         DemoStep(
             title: "Manga Screentone + Outline",
@@ -714,7 +771,12 @@ final class DemoSceneController {
             mode: .halftoneWithOutline,
             outlineMode: .solid,
             outlineSpeed: 0.0,
-            halftonePreset: FilamentToonMaterial.mangaScreentonePreset
+            halftonePreset: FilamentToonMaterial.mangaScreentonePreset,
+            duration: 1.9,
+            initialAzimuth: 0.60,
+            initialElevation: 0.28,
+            initialDistance: 9.0,
+            cameraMove: .slowPan(speed: -0.16)
         ),
         DemoStep(
             title: "VIBGYOR Rainbow Spectrum",
@@ -722,7 +784,12 @@ final class DemoSceneController {
             mode: .toonWithOutline,
             outlineMode: .rainbow,
             outlineSpeed: 1.5,
-            halftonePreset: nil
+            halftonePreset: nil,
+            duration: 3.0,
+            initialAzimuth: -0.72,
+            initialElevation: 0.10,
+            initialDistance: 9.2,
+            cameraMove: .slowDollyOut(speed: 0.25)
         ),
         DemoStep(
             title: "Random Multi-Color Facets",
@@ -730,9 +797,24 @@ final class DemoSceneController {
             mode: .toonWithOutline,
             outlineMode: .randomFacets,
             outlineSpeed: 0.0,
-            halftonePreset: nil
+            halftonePreset: nil,
+            duration: 2.2,
+            initialAzimuth: 0.35,
+            initialElevation: 0.18,
+            initialDistance: 9.5,
+            cameraMove: .arcSweep(speed: 0.18)
         ),
     ]
+
+    @discardableResult
+    func toggleDemoTurntable() -> Bool {
+        guard isDemoModeActive else { return false }
+        isDemoTurntableEnabled.toggle()
+        camera.isAutoOrbiting = isDemoTurntableEnabled
+        camera.lockAutoOrbit = isDemoTurntableEnabled
+        onDemoTurntableToggled?(isDemoTurntableEnabled)
+        return isDemoTurntableEnabled
+    }
 
     @discardableResult
     func toggleDemoMode(in window: NSWindow) -> Bool {
@@ -763,9 +845,16 @@ final class DemoSceneController {
         savedAnimationPlaying = isAnimationPlaying
 
         // 1. Center model at ~30% size in full window
-        camera.setPose(azimuth: 0.0, elevation: 0.15, distance: 10.5, target: (0.0, 0.0, 0.0))
-        camera.isAutoOrbiting = true
-        camera.lockAutoOrbit = true
+        camera.setPose(azimuth: 0.0, elevation: 0.12, distance: 10.5, target: (0.0, 0.0, 0.0))
+        isDemoTurntableEnabled = false
+        camera.isAutoOrbiting = false
+        camera.lockAutoOrbit = false
+
+        stepStartTime = CACurrentMediaTime()
+        currentStepBaseAzimuth = 0.0
+        currentStepBaseElevation = 0.12
+        currentStepBaseDistance = 10.5
+        currentCameraMove = .subtleBreathing
 
         if model.hasAnimations {
             isAnimationPlaying = true
@@ -810,10 +899,10 @@ final class DemoSceneController {
         let total = Self.demoSteps.count
         onDemoModeStepChanged?(0, total, "Standard PBR", "Per-Pixel Alpha Transparent Mode Active")
 
-        // 4. Then every 2 seconds, cycle through all modes
+        // Hold initial alpha step for remaining 1.8s, then advance to step 1
         demoStepIndex = 1
         demoTimer?.invalidate()
-        let stepTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self, weak window] _ in
+        let stepTimer = Timer.scheduledTimer(withTimeInterval: 1.8, repeats: false) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 guard let self, let window, self.isDemoModeActive else { return }
                 self.advanceDemoStep(window: window)
@@ -841,13 +930,101 @@ final class DemoSceneController {
             applyHalftonePreset(preset)
         }
 
+        stepStartTime = CACurrentMediaTime()
+        currentStepBaseAzimuth = step.initialAzimuth
+        currentStepBaseElevation = step.initialElevation
+        currentStepBaseDistance = step.initialDistance
+        currentCameraMove = step.cameraMove
+
+        if !isDemoTurntableEnabled {
+            camera.setPose(
+                azimuth: step.initialAzimuth,
+                elevation: step.initialElevation,
+                distance: step.initialDistance,
+                target: (0.0, 0.0, 0.0)
+            )
+        } else {
+            camera.setPose(
+                elevation: step.initialElevation,
+                distance: step.initialDistance,
+                target: (0.0, 0.0, 0.0)
+            )
+        }
+
         onDemoModeStepChanged?(demoStepIndex, total, step.title, step.subtitle)
+        let curDuration = step.duration
         demoStepIndex = (demoStepIndex + 1) % total
+
+        // Schedule next cut with this step's dynamic duration
+        demoTimer?.invalidate()
+        let nextTimer = Timer.scheduledTimer(withTimeInterval: curDuration, repeats: false) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window, self.isDemoModeActive else { return }
+                self.advanceDemoStep(window: window)
+            }
+        }
+        RunLoop.main.add(nextTimer, forMode: .common)
+        demoTimer = nextTimer
+    }
+
+    private func updateDemoCamera(dt: Float) {
+        guard isDemoModeActive else { return }
+
+        if isDemoTurntableEnabled {
+            // Turntable is active (R key pressed): auto-orbit handles 360 spin
+            return
+        }
+
+        let elapsed = CACurrentMediaTime() - stepStartTime
+
+        switch currentCameraMove {
+        case .subtleBreathing:
+            let breath = sin(elapsed * 1.5) * 0.025
+            let dolly = sin(elapsed * 1.1) * 0.12
+            camera.setPose(
+                azimuth: currentStepBaseAzimuth + breath,
+                elevation: currentStepBaseElevation + breath * 0.4,
+                distance: currentStepBaseDistance + dolly
+            )
+
+        case .slowDollyIn(let speed):
+            let curDist = max(7.0, currentStepBaseDistance - elapsed * speed)
+            let sway = sin(elapsed * 0.8) * 0.015
+            camera.setPose(
+                azimuth: currentStepBaseAzimuth + sway,
+                distance: curDist
+            )
+
+        case .slowDollyOut(let speed):
+            let curDist = min(11.5, currentStepBaseDistance + elapsed * speed)
+            let sway = sin(elapsed * 0.8) * 0.015
+            camera.setPose(
+                azimuth: currentStepBaseAzimuth + sway,
+                distance: curDist
+            )
+
+        case .slowPan(let speed):
+            let curAz = currentStepBaseAzimuth + elapsed * speed
+            let breath = sin(elapsed * 1.2) * 0.02
+            camera.setPose(
+                azimuth: curAz,
+                elevation: currentStepBaseElevation + breath
+            )
+
+        case .arcSweep(let speed):
+            let curAz = currentStepBaseAzimuth + elapsed * speed
+            let curEl = currentStepBaseElevation + sin(elapsed * speed * 2.0) * 0.05
+            camera.setPose(
+                azimuth: curAz,
+                elevation: curEl
+            )
+        }
     }
 
     func stopDemoMode(in window: NSWindow) {
         guard isDemoModeActive else { return }
         isDemoModeActive = false
+        isDemoTurntableEnabled = false
 
         demoTimer?.invalidate()
         demoTimer = nil
@@ -934,6 +1111,7 @@ final class DemoSceneController {
             out.gradientPhase = nextPhase >= 0 ? nextPhase : (nextPhase + 1.0)
         }
 
+        updateDemoCamera(dt: dt)
         camera.update(dt: dt)
 
         if filamentView.renderFrame() {

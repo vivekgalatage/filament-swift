@@ -5,11 +5,13 @@ import AppKit
 @MainActor
 final class DemoHUDView: NSVisualEffectView {
     var onExitRequested: (() -> Void)?
+    var onTurntableToggleRequested: (() -> Void)?
 
     private let badgeLabel = NSTextField(labelWithString: "● REC REEL")
     private let stepLabel = NSTextField(labelWithString: "Step 1 of 9")
     private let titleLabel = NSTextField(labelWithString: "Standard PBR")
     private let subtitleLabel = NSTextField(labelWithString: "Physically-Based Rendering")
+    private let turntableButton = NSButton()
     private let exitButton = NSButton()
 
     override init(frame frameRect: NSRect) {
@@ -93,10 +95,20 @@ final class DemoHUDView: NSVisualEffectView {
 
         stack.addArrangedSubview(textStack)
 
-        // Spacer to push exit button
+        // Spacer to push action buttons
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(spacer)
+
+        // Turntable button
+        turntableButton.title = "🔄 Turntable: OFF [R]"
+        turntableButton.bezelStyle = .inline
+        turntableButton.controlSize = .small
+        turntableButton.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        turntableButton.target = self
+        turntableButton.action = #selector(onTurntableClicked)
+        turntableButton.setContentHuggingPriority(.required, for: .horizontal)
+        stack.addArrangedSubview(turntableButton)
 
         // Exit button
         exitButton.title = "Stop (Esc)"
@@ -109,8 +121,17 @@ final class DemoHUDView: NSVisualEffectView {
         stack.addArrangedSubview(exitButton)
     }
 
+    @objc private func onTurntableClicked() {
+        onTurntableToggleRequested?()
+    }
+
     @objc private func onExitClicked() {
         onExitRequested?()
+    }
+
+    func setTurntableState(enabled: Bool) {
+        turntableButton.title = enabled ? "🔄 Turntable: ON [R]" : "🔄 Turntable: OFF [R]"
+        turntableButton.contentTintColor = enabled ? .systemTeal : .secondaryLabelColor
     }
 
     func update(step: Int, total: Int, title: String, subtitle: String) {
@@ -125,8 +146,8 @@ final class DemoHUDView: NSVisualEffectView {
             centerXAnchor.constraint(equalTo: parentView.centerXAnchor),
             bottomAnchor.constraint(equalTo: parentView.bottomAnchor, constant: -24),
             heightAnchor.constraint(equalToConstant: 44),
-            widthAnchor.constraint(greaterThanOrEqualToConstant: 380),
-            widthAnchor.constraint(lessThanOrEqualToConstant: 580),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 520),
+            widthAnchor.constraint(lessThanOrEqualToConstant: 740),
         ])
 
         alphaValue = 0.0
