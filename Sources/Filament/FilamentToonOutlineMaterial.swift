@@ -34,6 +34,7 @@ public final class FilamentToonOutlineMaterial: @unchecked Sendable {
         case radial = 2
         case rainbow = 3
         case randomFacets = 4
+        case graphitePencil = 5
 
         public var title: String {
             switch self {
@@ -42,6 +43,7 @@ public final class FilamentToonOutlineMaterial: @unchecked Sendable {
             case .radial: return "Radial Angle Gradient (360°)"
             case .rainbow: return "VIBGYOR Rainbow Spectrum"
             case .randomFacets: return "Random Multi-Color Facets"
+            case .graphitePencil: return "Graphite Pencil Lead"
             }
         }
     }
@@ -151,6 +153,16 @@ public final class FilamentToonOutlineMaterial: @unchecked Sendable {
         didSet { updateNoise() }
     }
 
+    /// Amplitude of hand-drawn jitter / organic stroke wobble (0.0 = crisp vector, 1.0 = rough freehand sketch).
+    public var outlineJitter: Float = 0.0 {
+        didSet { updateJitter() }
+    }
+
+    /// Spatial frequency of the organic stroke wobble.
+    public var outlineJitterFreq: Float = 4.0 {
+        didSet { updateJitterFreq() }
+    }
+
     /// Speed for automatic continuous flow animation in cycles per second.
     /// If 0.0, the gradient remains static.
     public var flowAnimationSpeed: Float = 0.0
@@ -249,6 +261,8 @@ public final class FilamentToonOutlineMaterial: @unchecked Sendable {
         updatePhase()
         updateScale()
         updateNoise()
+        updateJitter()
+        updateJitterFreq()
     }
 
     private func updateOutlineColor() {
@@ -308,6 +322,20 @@ public final class FilamentToonOutlineMaterial: @unchecked Sendable {
         guard let inst = storage.materialInstance else { return }
         "noiseScale".withCString {
             FilamentBridge.setMaterialParameterFloat(inst, $0, noiseScale)
+        }
+    }
+
+    private func updateJitter() {
+        guard let inst = storage.materialInstance else { return }
+        "outlineJitter".withCString {
+            FilamentBridge.setMaterialParameterFloat(inst, $0, outlineJitter)
+        }
+    }
+
+    private func updateJitterFreq() {
+        guard let inst = storage.materialInstance else { return }
+        "outlineJitterFreq".withCString {
+            FilamentBridge.setMaterialParameterFloat(inst, $0, outlineJitterFreq)
         }
     }
 

@@ -25,6 +25,7 @@ final class DemoSceneController {
         case outlineOnly = 4
         case comicHalftone = 5
         case halftoneWithOutline = 6
+        case handdrawnSketch = 7
 
         var title: String {
             switch self {
@@ -35,6 +36,7 @@ final class DemoSceneController {
             case .outlineOnly: return "Outline Only (Transparent Body)"
             case .comicHalftone: return "Comic Halftone (Pop-Art / Manga)"
             case .halftoneWithOutline: return "Halftone + Inked Outline"
+            case .handdrawnSketch: return "✏️ Handdrawn Technical Sketch"
             }
         }
     }
@@ -44,6 +46,8 @@ final class DemoSceneController {
         case paperWhite = 1
         case blueprint = 2
         case neutralGray = 3
+        case creamVellum = 4
+        case slateCharcoal = 5
 
         var title: String {
             switch self {
@@ -51,6 +55,8 @@ final class DemoSceneController {
             case .paperWhite: return "Paper White (Print)"
             case .blueprint: return "Blueprint Blue"
             case .neutralGray: return "Neutral Gray"
+            case .creamVellum: return "Cream Drafting Vellum"
+            case .slateCharcoal: return "Slate Charcoal"
             }
         }
     }
@@ -275,6 +281,29 @@ final class DemoSceneController {
             }
             outlineModel.setPriority(6)
             outlineModel.setVisible(true)
+
+        case .handdrawnSketch:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                toon.halftoneMode = .handdrawnSketch
+                toon.halftoneTarget = .fullSurface
+                model.applyToonMaterial(toon)
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                if outline.outlineJitter < 0.001 {
+                    outline.outlineJitter = 0.25
+                }
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
         }
     }
 
@@ -336,6 +365,10 @@ final class DemoSceneController {
             filamentView.engine.setClearColor(r: 0.10, g: 0.22, b: 0.38, a: 1.0)
         case .neutralGray:
             filamentView.engine.setClearColor(r: 0.50, g: 0.50, b: 0.50, a: 1.0)
+        case .creamVellum:
+            filamentView.engine.setClearColor(r: 0.98, g: 0.96, b: 0.92, a: 1.0)
+        case .slateCharcoal:
+            filamentView.engine.setClearColor(r: 0.10, g: 0.11, b: 0.13, a: 1.0)
         }
     }
 
@@ -626,6 +659,62 @@ final class DemoSceneController {
         ensureToonMaterials()
         toonMaterial?.applyPreset(preset)
         overlayWindow?.applyHalftonePreset(preset)
+    }
+
+    // MARK: - Handdrawn Sketch & CAD Technical Diagram controls
+
+    func setOutlineJitter(_ jitter: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineJitter = jitter
+        overlayWindow?.setOutlineJitter(jitter)
+    }
+
+    func setOutlineJitterFreq(_ freq: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineJitterFreq = freq
+        overlayWindow?.setOutlineJitterFreq(freq)
+    }
+
+    func setHatchJitter(_ jitter: Float) {
+        ensureToonMaterials()
+        toonMaterial?.hatchJitter = jitter
+        overlayWindow?.setHatchJitter(jitter)
+    }
+
+    func setHatchLayers(_ layers: Int32) {
+        ensureToonMaterials()
+        toonMaterial?.hatchLayers = layers
+        overlayWindow?.setHatchLayers(layers)
+    }
+
+    func setHatchThresholds(t1: Float, t2: Float, t3: Float) {
+        ensureToonMaterials()
+        toonMaterial?.hatchThreshold1 = t1
+        toonMaterial?.hatchThreshold2 = t2
+        toonMaterial?.hatchThreshold3 = t3
+        overlayWindow?.setHatchThresholds(t1: t1, t2: t2, t3: t3)
+    }
+
+    func applySketchPreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        ensureToonMaterials()
+        toonMaterial?.applyPreset(preset)
+        overlayWindow?.applyHalftonePreset(preset)
+
+        // Automatically sync outline parameters for high-fidelity technical diagrams
+        setOutlineColor(r: preset.dotColor.r, g: preset.dotColor.g, b: preset.dotColor.b)
+        setOutlineJitter(preset.hatchJitter * 0.85)
+        setOutlineThickness(preset.dotSize * 2.2)
+
+        // Set matching canvas background
+        if preset.paperColor.a < 0.01 {
+            // Transparent Mylar: keep existing background or clear
+        } else if preset.paperColor.r < 0.15 && preset.paperColor.b > 0.20 {
+            setCanvasBackground(.blueprint)
+        } else if preset.paperColor.r > 0.95 && preset.paperColor.g > 0.95 && preset.paperColor.b > 0.95 {
+            setCanvasBackground(.paperWhite)
+        } else if preset.paperColor.r > 0.90 && preset.paperColor.b < 0.95 {
+            setCanvasBackground(.creamVellum)
+        }
     }
 
     // MARK: - Demo Mode (Product Video Reel)

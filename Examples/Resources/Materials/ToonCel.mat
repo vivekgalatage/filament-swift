@@ -66,6 +66,26 @@ material {
         {
             type : float4,
             name : halftonePaperColor
+        },
+        {
+            type : float,
+            name : hatchJitter
+        },
+        {
+            type : int,
+            name : hatchLayers
+        },
+        {
+            type : float,
+            name : hatchThreshold1
+        },
+        {
+            type : float,
+            name : hatchThreshold2
+        },
+        {
+            type : float,
+            name : hatchThreshold3
         }
     ],
     requires : [
@@ -89,11 +109,18 @@ fragment {
         return 1.0 - smoothstep(targetRadius - eps, targetRadius + eps, distToCenter);
     }
 
-    // Evaluates a single rotated grid line mask for hatching in [0.0, 1.0]
-    float evalHalftoneLine(vec2 p, float angleDeg, float scale, float darkness, float lineSize, float hardness) {
+    // Evaluates a single rotated grid line mask for hatching in [0.0, 1.0] with optional hand wobble
+    float evalHalftoneLine(vec2 p, float angleDeg, float scale, float darkness, float lineSize, float hardness, float jitter) {
         float rad = radians(angleDeg);
         mat2 rot = mat2(cos(rad), -sin(rad), sin(rad), cos(rad));
-        vec2 grid = (rot * p) / max(1.0, scale);
+        vec2 pRot = rot * p;
+
+        if (jitter > 0.001) {
+            float wobble = sin(pRot.x * 0.05 + pRot.y * 0.02) * jitter * 2.2;
+            pRot.y += wobble;
+        }
+
+        vec2 grid = pRot / max(1.0, scale);
         float distToLine = abs(fract(grid.y) - 0.5);
         float fw = fwidth(distToLine);
         float targetWidth = clamp(darkness, 0.0, 1.0) * 0.5 * lineSize;
@@ -138,11 +165,6 @@ fragment {
             return;
         }
 
-        // Coordinate space selection:
-        // mode 1: Screen-space coordinates (classic fixed Ben-Day print)
-        // mode 2: Surface UV coordinates (model-anchored screentone)
-        // mode 3: CMYK Color Separation (Screen space)
-        // mode 4: Hatching / Engraving Lines (Screen space)
         vec2 coord;
         if (mode == 2) {
             coord = getUV0() * (materialParams.halftoneScale * 10.0);
@@ -150,10 +172,6 @@ fragment {
             coord = gl_FragCoord.xy;
         }
 
-        // Determine darkness/shading level according to target zone:
-        // target 0: Shadows only (Manga screentone in shadow/midtone boundary)
-        // target 1: Full surface intensity (Pop-Art print over entire lighting range)
-        // target 2: Highlights only
         float darkness;
         int target = materialParams.halftoneTarget;
         if (target == 0) {
@@ -194,13 +212,67 @@ fragment {
             halftoneRgb = cmykResult;
         } else if (mode == 4) {
             // Hatching / Engraving Lines
-            float lineMask = evalHalftoneLine(coord, baseAngle, scale, darkness, dotSize, hardness);
+            float lineMask = evalHalftoneLine(coord, baseAngle, scale, darkness, dotSize, hardness, 0.0);
             if (darkness > 0.65) {
-                float crossMask = evalHalftoneLine(coord, baseAngle + 60.0, scale, (darkness - 0.65) * 2.5, dotSize, hardness);
+                float crossMask = evalHalftoneLine(coord, baseAngle + 60.0, scale, (darkness - 0.65) * 2.5, dotSize, hardness, 0.0);
                 lineMask = max(lineMask, crossMask);
             }
             vec3 bgTone = (target == 1) ? paperColor : celRgb;
             halftoneRgb = mix(bgTone, dotColor, lineMask);
+        } else if (mode == 5) {
+            // Mode 5: Pure Handdrawn Technical Sketch / Architectural Cross-Hatching
+            float jitter = materialParams.hatchJitter;
+            int layers = max(1, min(4, materialParams.hatchLayers));
+            float t1 = materialParams.hatchThreshold1 > 0.0 ? materialParams.hatchThreshold1 : 0.15;
+            float t2 = materialParams.hatchThreshold2 > 0.0 ? materialParams.hatchThreshold2 : 0.45;
+            float t3 = materialParams.hatchThreshold3 > 0.0 ? materialParams.hatchThreshold3 : 0.70;
+
+            float lineMask = 0.0;
+
+            // Tier 1: Primary directional pencil strokes (e.g. 45°)
+            if (darkness > t1) {
+                float d1 = clamp((darkness - t1) / max(0.001, 1.0 - t1), 0.0, 1.0);
+                float m1 = evalHalftoneLine(coord, baseAngle, scale, d1, dotSize, hardness, jitter);
+                lineMask = max(lineMask, m1);
+            }
+
+            // Tier 2: Cross-hatching strokes (+60° architectural angle)
+            if (layers >= 2 && darkness > t2) {
+                float d2 = clamp((darkness - t2) / max(0.001, 1.0 - t2), 0.0, 1.0);
+                float m2 = evalHalftoneLine(coord, baseAngle + 60.0, scale, d2, dotSize * 0.95, hardness, jitter * 1.1);
+                lineMask = max(lineMask, m2);
+            }
+
+            // Tier 3: Dense shadow hatching (-45° counter angle)
+            if (layers >= 3 && darkness > t3) {
+                float d3 = clamp((darkness - t3) / max(0.001, 1.0 - t3), 0.0, 1.0);
+                float m3 = evalHalftoneLine(coord, baseAngle - 45.0, scale, d3, dotSize * 0.90, hardness, jitter * 1.2);
+                lineMask = max(lineMask, m3);
+            }
+
+            // Tier 4: Core deep shadow stippling / dense cross-weave (90° perpendicular)
+            if (layers >= 4 && darkness > 0.88) {
+                float d4 = clamp((darkness - 0.88) / 0.12, 0.0, 1.0);
+                float m4 = evalHalftoneLine(coord, baseAngle + 90.0, scale * 0.75, d4, dotSize * 1.1, hardness, jitter * 1.3);
+                lineMask = max(lineMask, m4);
+            }
+
+            // Graphite paper tooth texture modulation
+            if (hardness < 0.98) {
+                vec2 gridCoord = floor(coord * 0.5);
+                float grain = fract(sin(dot(gridCoord, vec2(12.9898, 78.233))) * 43758.5453);
+                lineMask *= mix(1.0, 0.75 + 0.35 * grain, 1.0 - hardness);
+            }
+
+            vec3 bgTone = (target == 1) ? paperColor : celRgb;
+            halftoneRgb = mix(bgTone, dotColor, lineMask);
+
+            // If transparent paper (paperColor.a == 0.0), output alpha based on lineMask
+            if (materialParams.halftonePaperColor.a < 0.01 && target == 1) {
+                float finalAlpha = clamp(lineMask * materialParams.halftoneDotColor.a, 0.0, 1.0);
+                material.baseColor = vec4(dotColor, finalAlpha);
+                return;
+            }
         } else {
             // Standard Dots (Screen-space or UV surface)
             float dotMask = evalHalftoneDot(coord, baseAngle, scale, darkness, dotSize, hardness);

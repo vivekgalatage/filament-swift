@@ -71,6 +71,31 @@ final class InspectorView: NSObject {
         HalftoneColorPreset(name: "Dark Comic Ink", color: (0.15, 0.16, 0.20, 1.0)),
     ]
 
+    private var sketchPresetPopup: NSPopUpButton?
+    private var sketchLayersPopup: NSPopUpButton?
+    private var sketchInkColorPopup: NSPopUpButton?
+    private var sketchInkColorWell: NSColorWell?
+    private var sketchPaperColorPopup: NSPopUpButton?
+    private var sketchPaperColorWell: NSColorWell?
+    private var sketchOutlineStylePopup: NSPopUpButton?
+
+    private let sketchInkPresets: [HalftoneColorPreset] = [
+        HalftoneColorPreset(name: "Drafting Graphite", color: (0.12, 0.12, 0.14, 1.0)),
+        HalftoneColorPreset(name: "Blueprint Cyan Ink", color: (0.35, 0.82, 1.00, 1.0)),
+        HalftoneColorPreset(name: "Soft 2B Pencil", color: (0.16, 0.15, 0.14, 1.0)),
+        HalftoneColorPreset(name: "Micron Jet Black", color: (0.02, 0.02, 0.03, 1.0)),
+        HalftoneColorPreset(name: "Architectural Sepia", color: (0.30, 0.20, 0.14, 1.0)),
+        HalftoneColorPreset(name: "White Chalk", color: (0.95, 0.95, 0.96, 1.0)),
+    ]
+
+    private let sketchPaperPresets: [HalftoneColorPreset] = [
+        HalftoneColorPreset(name: "Architectural White", color: (1.00, 1.00, 1.00, 1.0)),
+        HalftoneColorPreset(name: "Technical Blueprint Navy", color: (0.06, 0.15, 0.28, 1.0)),
+        HalftoneColorPreset(name: "Drafting Cream Vellum", color: (0.98, 0.96, 0.92, 1.0)),
+        HalftoneColorPreset(name: "Slate Charcoal Board", color: (0.10, 0.11, 0.13, 1.0)),
+        HalftoneColorPreset(name: "Transparent Mylar (Zero-Alpha)", color: (1.00, 1.00, 1.00, 0.0)),
+    ]
+
     private var solidColorRow: NSView!
     private var gradientControlsContainer: NSStackView!
     private var gradientStopsList: NSStackView!
@@ -203,6 +228,7 @@ final class InspectorView: NSObject {
         addModelSection(to: content)
         addToonShadingSection(to: content)
         addHalftoneSection(to: content)
+        addHanddrawnSketchSection(to: content)
         addMorphTargetsSection(to: content)
         addLightingSection(to: content)
         addToneMappingSection(to: content)
@@ -759,6 +785,226 @@ final class InspectorView: NSObject {
         ])
         paperRow.addArrangedSubview(paperWell)
         self.halftonePaperColorWell = paperWell
+
+        stack.addArrangedSubview(paperRow)
+        NSLayoutConstraint.activate([
+            paperRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+    }
+
+    private func addHanddrawnSketchSection(to stack: NSStackView) {
+        stack.addArrangedSubview(makeSectionHeader("Handdrawn Technical Sketch & CAD"))
+
+        // Mode switch button
+        let modeButton = NSButton(title: "✏️ Switch to Technical Sketch Mode", target: self, action: #selector(onActivateSketchModeClicked))
+        modeButton.bezelStyle = .rounded
+        modeButton.controlSize = .small
+        modeButton.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        stack.addArrangedSubview(modeButton)
+
+        // Presets dropdown
+        let presetPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        presetPopup.addItems(withTitles: [
+            "Sketch Presets…",
+            "📐 Architectural Drafting (White + Graphite)",
+            "📘 Technical Blueprint (Cyan + Navy)",
+            "✏️ Handdrawn 2B Pencil (Wobble on Vellum)",
+            "✒️ CAD Vector Wireframe (Crisp Ink)",
+            "📄 Transparent Mylar (Figma Export)"
+        ])
+        presetPopup.selectItem(at: 0)
+        presetPopup.controlSize = .small
+        presetPopup.target = self
+        presetPopup.action = #selector(onSketchPresetChanged(_:))
+        presetPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let presetRow = NSStackView(views: [
+            NSTextField(labelWithString: "Preset"),
+            presetPopup
+        ])
+        presetRow.orientation = .horizontal
+        presetRow.distribution = .fill
+        stack.addArrangedSubview(presetRow)
+        self.sketchPresetPopup = presetPopup
+
+        // Outline Stroke Style / Texture
+        let stylePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        stylePopup.addItems(withTitles: [
+            "Graphite Pencil Lead (Micro-Grain)",
+            "Solid Technical Ink Line"
+        ])
+        stylePopup.selectItem(at: 0)
+        stylePopup.controlSize = .small
+        stylePopup.target = self
+        stylePopup.action = #selector(onSketchOutlineStyleChanged(_:))
+        stylePopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let styleRow = NSStackView(views: [
+            NSTextField(labelWithString: "Stroke style"),
+            stylePopup
+        ])
+        styleRow.orientation = .horizontal
+        styleRow.distribution = .fill
+        stack.addArrangedSubview(styleRow)
+        self.sketchOutlineStylePopup = stylePopup
+
+        // Sliders for Pencil Stroke
+        addSlider(to: stack, title: "Pencil weight", range: 0.5...8.0,
+                  value: 2.2,
+                  format: { String(format: "%.1f px", $0) }) { [weak self] val in
+            self?.scene.setOutlineThickness(Float(val))
+        }
+
+        addSlider(to: stack, title: "Stroke wobble", range: 0.0...1.0,
+                  value: 0.25,
+                  format: { String(format: "%.2f", $0) }) { [weak self] val in
+            self?.scene.setOutlineJitter(Float(val))
+        }
+
+        addSlider(to: stack, title: "Wobble freq", range: 0.5...20.0,
+                  value: 4.0,
+                  format: { String(format: "%.1f", $0) }) { [weak self] val in
+            self?.scene.setOutlineJitterFreq(Float(val))
+        }
+
+        // Sliders for Hatching Shades
+        addSlider(to: stack, title: "Hatch spacing", range: 4.0...60.0,
+                  value: 16.0,
+                  format: { String(format: "%.0f px", $0) }) { [weak self] val in
+            self?.scene.setHalftoneScale(Float(val))
+        }
+
+        addSlider(to: stack, title: "Hatch angle", range: 0.0...180.0,
+                  value: 45.0,
+                  format: { String(format: "%.0f°", $0) }) { [weak self] val in
+            self?.scene.setHalftoneAngle(Float(val))
+        }
+
+        addSlider(to: stack, title: "Hatch wobble", range: 0.0...1.0,
+                  value: 0.20,
+                  format: { String(format: "%.2f", $0) }) { [weak self] val in
+            self?.scene.setHatchJitter(Float(val))
+        }
+
+        // Cross-Hatch Depth / Layers
+        let layersPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        layersPopup.addItems(withTitles: [
+            "1 Tier: Single Directional (45°)",
+            "2 Tiers: Cross-Hatch (+60°)",
+            "3 Tiers: Dense Shadows (-45°)",
+            "4 Tiers: Core Crevice Stippling (+90°)"
+        ])
+        layersPopup.selectItem(at: 2) // default 3 tiers
+        layersPopup.controlSize = .small
+        layersPopup.target = self
+        layersPopup.action = #selector(onSketchLayersChanged(_:))
+        layersPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let layersRow = NSStackView(views: [
+            NSTextField(labelWithString: "Cross-hatch"),
+            layersPopup
+        ])
+        layersRow.orientation = .horizontal
+        layersRow.distribution = .fill
+        stack.addArrangedSubview(layersRow)
+        self.sketchLayersPopup = layersPopup
+
+        addSlider(to: stack, title: "Lead hardness", range: 0.1...1.0,
+                  value: 0.88,
+                  format: { String(format: "%.2f", $0) }) { [weak self] val in
+            self?.scene.setHalftoneHardness(Float(val))
+        }
+
+        addSlider(to: stack, title: "Hatch coverage", range: -0.5...0.8,
+                  value: 0.05,
+                  format: { String(format: "%.2f", $0) }) { [weak self] val in
+            self?.scene.setToonShadowThreshold(Float(val))
+        }
+
+        // Ink / Graphite Color Row
+        let inkRow = NSStackView()
+        inkRow.translatesAutoresizingMaskIntoConstraints = false
+        inkRow.orientation = .horizontal
+        inkRow.alignment = .centerY
+        inkRow.distribution = .fill
+        inkRow.spacing = 6.0
+
+        let inkLabel = NSTextField(labelWithString: "Lead / ink")
+        inkLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        inkLabel.setContentHuggingPriority(.required, for: .horizontal)
+        inkRow.addArrangedSubview(inkLabel)
+
+        let inkPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for preset in sketchInkPresets {
+            inkPopup.addItem(withTitle: preset.name)
+        }
+        inkPopup.addItem(withTitle: "Custom…")
+        inkPopup.selectItem(at: 0)
+        inkPopup.controlSize = .small
+        inkPopup.target = self
+        inkPopup.action = #selector(onSketchInkPopupChanged(_:))
+        inkPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        inkRow.addArrangedSubview(inkPopup)
+        self.sketchInkColorPopup = inkPopup
+
+        let inkWell = NSColorWell()
+        inkWell.translatesAutoresizingMaskIntoConstraints = false
+        inkWell.color = sketchInkPresets[0].nsColor
+        inkWell.target = self
+        inkWell.action = #selector(onSketchInkWellChanged(_:))
+        inkWell.controlSize = .small
+        inkWell.toolTip = "Pick Custom Lead/Ink Color"
+        NSLayoutConstraint.activate([
+            inkWell.widthAnchor.constraint(equalToConstant: 28),
+            inkWell.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        inkRow.addArrangedSubview(inkWell)
+        self.sketchInkColorWell = inkWell
+
+        stack.addArrangedSubview(inkRow)
+        NSLayoutConstraint.activate([
+            inkRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+
+        // Paper Tone Row
+        let paperRow = NSStackView()
+        paperRow.translatesAutoresizingMaskIntoConstraints = false
+        paperRow.orientation = .horizontal
+        paperRow.alignment = .centerY
+        paperRow.distribution = .fill
+        paperRow.spacing = 6.0
+
+        let paperLabel = NSTextField(labelWithString: "Paper tone")
+        paperLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        paperLabel.setContentHuggingPriority(.required, for: .horizontal)
+        paperRow.addArrangedSubview(paperLabel)
+
+        let paperPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for preset in sketchPaperPresets {
+            paperPopup.addItem(withTitle: preset.name)
+        }
+        paperPopup.addItem(withTitle: "Custom…")
+        paperPopup.selectItem(at: 0)
+        paperPopup.controlSize = .small
+        paperPopup.target = self
+        paperPopup.action = #selector(onSketchPaperPopupChanged(_:))
+        paperPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        paperRow.addArrangedSubview(paperPopup)
+        self.sketchPaperColorPopup = paperPopup
+
+        let paperWell = NSColorWell()
+        paperWell.translatesAutoresizingMaskIntoConstraints = false
+        paperWell.color = sketchPaperPresets[0].nsColor
+        paperWell.target = self
+        paperWell.action = #selector(onSketchPaperWellChanged(_:))
+        paperWell.controlSize = .small
+        paperWell.toolTip = "Pick Custom Paper Tone"
+        NSLayoutConstraint.activate([
+            paperWell.widthAnchor.constraint(equalToConstant: 28),
+            paperWell.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        paperRow.addArrangedSubview(paperWell)
+        self.sketchPaperColorWell = paperWell
 
         stack.addArrangedSubview(paperRow)
         NSLayoutConstraint.activate([
@@ -1647,6 +1893,113 @@ final class InspectorView: NSObject {
         let a = Float(c.alphaComponent)
         scene.setHalftonePaperColor(r: r, g: g, b: b, a: a)
         halftonePaperColorPopup?.selectItem(withTitle: "Custom…")
+    }
+
+    // MARK: - Handdrawn Technical Sketch Actions
+
+    @objc private func onActivateSketchModeClicked() {
+        scene.setShadingMode(.handdrawnSketch)
+        syncShadingMode()
+    }
+
+    @objc private func onSketchPresetChanged(_ sender: NSPopUpButton) {
+        switch sender.indexOfSelectedItem {
+        case 1:
+            scene.setShadingMode(.handdrawnSketch)
+            applySketchPreset(FilamentToonMaterial.technicalArchitecturalPreset)
+        case 2:
+            scene.setShadingMode(.handdrawnSketch)
+            applySketchPreset(FilamentToonMaterial.blueprintPatentPreset)
+        case 3:
+            scene.setShadingMode(.handdrawnSketch)
+            applySketchPreset(FilamentToonMaterial.handdrawnPencil2BPreset)
+        case 4:
+            scene.setShadingMode(.handdrawnSketch)
+            applySketchPreset(FilamentToonMaterial.cadVectorWireframePreset)
+        case 5:
+            scene.setShadingMode(.handdrawnSketch)
+            applySketchPreset(FilamentToonMaterial.transparentMylarPreset)
+        default: break
+        }
+        syncShadingMode()
+    }
+
+    @objc private func onSketchOutlineStyleChanged(_ sender: NSPopUpButton) {
+        if sender.indexOfSelectedItem == 0 {
+            scene.setOutlineGradientMode(.graphitePencil)
+        } else {
+            scene.setOutlineGradientMode(.solid)
+        }
+    }
+
+    @objc private func onSketchLayersChanged(_ sender: NSPopUpButton) {
+        let layers = Int32(sender.indexOfSelectedItem + 1)
+        scene.setHatchLayers(layers)
+    }
+
+    @objc private func onSketchInkPopupChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        guard idx >= 0 && idx < sketchInkPresets.count else { return }
+        let preset = sketchInkPresets[idx]
+        scene.setHalftoneDotColor(r: preset.color.r, g: preset.color.g, b: preset.color.b, a: preset.color.a)
+        scene.setOutlineColor(r: preset.color.r, g: preset.color.g, b: preset.color.b)
+        sketchInkColorWell?.color = preset.nsColor
+    }
+
+    @objc private func onSketchInkWellChanged(_ sender: NSColorWell) {
+        let c = sender.color.usingColorSpace(.sRGB) ?? sender.color
+        let r = Float(c.redComponent)
+        let g = Float(c.greenComponent)
+        let b = Float(c.blueComponent)
+        let a = Float(c.alphaComponent)
+        scene.setHalftoneDotColor(r: r, g: g, b: b, a: a)
+        scene.setOutlineColor(r: r, g: g, b: b)
+        sketchInkColorPopup?.selectItem(withTitle: "Custom…")
+    }
+
+    @objc private func onSketchPaperPopupChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        guard idx >= 0 && idx < sketchPaperPresets.count else { return }
+        let preset = sketchPaperPresets[idx]
+        scene.setHalftonePaperColor(r: preset.color.r, g: preset.color.g, b: preset.color.b, a: preset.color.a)
+        sketchPaperColorWell?.color = preset.nsColor
+
+        if preset.color.a < 0.01 {
+            // Transparent
+        } else if preset.color.r < 0.15 && preset.color.b > 0.20 {
+            scene.setCanvasBackground(.blueprint)
+        } else if preset.color.r > 0.95 && preset.color.g > 0.95 && preset.color.b > 0.95 {
+            scene.setCanvasBackground(.paperWhite)
+        } else if preset.color.r > 0.90 && preset.color.b < 0.95 {
+            scene.setCanvasBackground(.creamVellum)
+        } else {
+            scene.setCanvasBackground(.slateCharcoal)
+        }
+    }
+
+    @objc private func onSketchPaperWellChanged(_ sender: NSColorWell) {
+        let c = sender.color.usingColorSpace(.sRGB) ?? sender.color
+        let r = Float(c.redComponent)
+        let g = Float(c.greenComponent)
+        let b = Float(c.blueComponent)
+        let a = Float(c.alphaComponent)
+        scene.setHalftonePaperColor(r: r, g: g, b: b, a: a)
+        sketchPaperColorPopup?.selectItem(withTitle: "Custom…")
+    }
+
+    func applySketchPreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        scene.applySketchPreset(preset)
+        updateSlider(titled: "Pencil weight", to: Double(preset.dotSize * 2.2))
+        updateSlider(titled: "Stroke wobble", to: Double(preset.hatchJitter * 0.85))
+        updateSlider(titled: "Hatch spacing", to: Double(preset.scale))
+        updateSlider(titled: "Hatch angle", to: Double(preset.angle))
+        updateSlider(titled: "Hatch wobble", to: Double(preset.hatchJitter))
+        updateSlider(titled: "Lead hardness", to: Double(preset.hardness))
+        sketchLayersPopup?.selectItem(at: max(0, min(3, Int(preset.hatchLayers - 1))))
+        let dotNS = NSColor(srgbRed: CGFloat(preset.dotColor.r), green: CGFloat(preset.dotColor.g), blue: CGFloat(preset.dotColor.b), alpha: CGFloat(preset.dotColor.a))
+        sketchInkColorWell?.color = dotNS
+        let paperNS = NSColor(srgbRed: CGFloat(preset.paperColor.r), green: CGFloat(preset.paperColor.g), blue: CGFloat(preset.paperColor.b), alpha: CGFloat(preset.paperColor.a))
+        sketchPaperColorWell?.color = paperNS
     }
 
     // MARK: - Demo Mode Actions

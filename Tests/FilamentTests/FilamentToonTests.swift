@@ -287,4 +287,57 @@ final class FilamentToonTests: XCTestCase {
         let largeEngine = FilamentEngine(backend: .metal, config: .largeModelPreset)
         XCTAssertNotNil(largeEngine.engine)
     }
+
+    @MainActor
+    func testHanddrawnSketchModeAndPencilJitter() throws {
+        let engine = FilamentEngine(backend: .metal)
+        let celURL = URL(fileURLWithPath: "Resources/Materials/ToonCel.filamat")
+        let outlineURL = URL(fileURLWithPath: "Resources/Materials/ToonOutline.filamat")
+        guard FileManager.default.fileExists(atPath: celURL.path),
+              FileManager.default.fileExists(atPath: outlineURL.path) else { return }
+
+        let toonMaterial = try engine.createToonMaterial(from: celURL)
+        let outlineMaterial = try engine.createOutlineMaterial(from: outlineURL)
+
+        // 1. Verify Handdrawn Sketch mode in HalftoneMode enum
+        XCTAssertEqual(FilamentToonMaterial.HalftoneMode.handdrawnSketch.rawValue, 5)
+        toonMaterial.halftoneMode = .handdrawnSketch
+        XCTAssertEqual(toonMaterial.halftoneMode, .handdrawnSketch)
+
+        // 2. Test Hatching parameters
+        toonMaterial.hatchJitter = 0.35
+        toonMaterial.hatchLayers = 4
+        toonMaterial.hatchThreshold1 = 0.18
+        toonMaterial.hatchThreshold2 = 0.42
+        toonMaterial.hatchThreshold3 = 0.68
+        XCTAssertEqual(toonMaterial.hatchJitter, 0.35)
+        XCTAssertEqual(toonMaterial.hatchLayers, 4)
+        XCTAssertEqual(toonMaterial.hatchThreshold1, 0.18)
+
+        // 3. Test Pencil stroke jitter in Outline Material
+        outlineMaterial.outlineJitter = 0.45
+        outlineMaterial.outlineJitterFreq = 6.5
+        outlineMaterial.gradientMode = .graphitePencil
+        XCTAssertEqual(outlineMaterial.outlineJitter, 0.45)
+        XCTAssertEqual(outlineMaterial.outlineJitterFreq, 6.5)
+        XCTAssertEqual(outlineMaterial.gradientMode, .graphitePencil)
+
+        // 4. Test Presets
+        toonMaterial.applyPreset(FilamentToonMaterial.technicalArchitecturalPreset)
+        XCTAssertEqual(toonMaterial.halftoneMode, .handdrawnSketch)
+        XCTAssertEqual(toonMaterial.hatchLayers, 3)
+
+        toonMaterial.applyPreset(FilamentToonMaterial.blueprintPatentPreset)
+        XCTAssertEqual(toonMaterial.halftoneMode, .handdrawnSketch)
+        XCTAssertEqual(toonMaterial.halftonePaperColor.r, 0.06, accuracy: 0.01)
+
+        toonMaterial.applyPreset(FilamentToonMaterial.handdrawnPencil2BPreset)
+        XCTAssertEqual(toonMaterial.halftoneMode, .handdrawnSketch)
+        XCTAssertEqual(toonMaterial.hatchLayers, 4)
+
+        toonMaterial.applyPreset(FilamentToonMaterial.transparentMylarPreset)
+        XCTAssertEqual(toonMaterial.halftoneMode, .handdrawnSketch)
+        XCTAssertEqual(toonMaterial.halftonePaperColor.a, 0.0, accuracy: 0.001)
+    }
 }
+

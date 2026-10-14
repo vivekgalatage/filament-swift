@@ -343,6 +343,33 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
         toonMaterial?.halftonePaperColor = (r, g, b, a)
     }
 
+    public func setOutlineJitter(_ jitter: Float) {
+        ensureMaterials()
+        outlineMaterial?.outlineJitter = jitter
+    }
+
+    public func setOutlineJitterFreq(_ freq: Float) {
+        ensureMaterials()
+        outlineMaterial?.outlineJitterFreq = freq
+    }
+
+    public func setHatchJitter(_ jitter: Float) {
+        ensureMaterials()
+        toonMaterial?.hatchJitter = jitter
+    }
+
+    public func setHatchLayers(_ layers: Int32) {
+        ensureMaterials()
+        toonMaterial?.hatchLayers = layers
+    }
+
+    public func setHatchThresholds(t1: Float, t2: Float, t3: Float) {
+        ensureMaterials()
+        toonMaterial?.hatchThreshold1 = t1
+        toonMaterial?.hatchThreshold2 = t2
+        toonMaterial?.hatchThreshold3 = t3
+    }
+
     public func applyHalftonePreset(_ preset: FilamentToonMaterial.HalftonePreset) {
         ensureMaterials()
         toonMaterial?.applyPreset(preset)
@@ -424,6 +451,22 @@ public final class FilamentOverlayWindow: NSObject, NSWindowDelegate {
                 model.applyToonMaterial(toon)
             }
             if let outline = outlineMaterial {
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
+
+        case 7: // Handdrawn Technical Sketch
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                toon.halftoneMode = .handdrawnSketch
+                toon.halftoneTarget = .fullSurface
+                model.applyToonMaterial(toon)
+            }
+            if let outline = outlineMaterial {
+                if outline.outlineJitter < 0.001 {
+                    outline.outlineJitter = 0.25
+                }
                 outlineModel.applyOutlineMaterial(outline)
             }
             outlineModel.setPriority(6)

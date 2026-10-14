@@ -46,6 +46,14 @@ material {
         {
             type : float,
             name : noiseScale
+        },
+        {
+            type : float,
+            name : outlineJitter
+        },
+        {
+            type : float,
+            name : outlineJitterFreq
         }
     ],
     requires : [
@@ -56,12 +64,24 @@ material {
 
 vertex {
     void materialVertex(inout MaterialVertexInputs material) {
-        // Perspective distance compensation for uniform screen-space outline width
         float cameraDist = length(material.worldPosition.xyz - getWorldCameraPosition());
         vec3 normal = material.worldNormal;
+        vec3 pos = material.worldPosition.xyz;
 
-        // Extrude back-faces outward along normal vector
-        material.worldPosition.xyz += normal * (materialParams.outlineThickness * cameraDist * 0.001);
+        float jitterAmp = materialParams.outlineJitter;
+        float jitter = 0.0;
+        if (jitterAmp > 0.0001) {
+            float freq = max(0.5, materialParams.outlineJitterFreq);
+            float w1 = sin(pos.x * freq * 3.7 + pos.y * freq * 2.3);
+            float w2 = cos(pos.y * freq * 4.1 + pos.z * freq * 3.3);
+            float w3 = sin(pos.z * freq * 1.9 + pos.x * freq * 5.7);
+            jitter = (w1 + w2 + w3) * 0.3333;
+        }
+
+        float pressureMod = 1.0 + jitter * jitterAmp * 0.75;
+        float thickness = max(0.0, materialParams.outlineThickness * pressureMod);
+        vec3 offsetNormal = normal * (1.0 + jitter * jitterAmp * 0.5);
+        material.worldPosition.xyz += offsetNormal * (thickness * cameraDist * 0.001);
     }
 }
 
@@ -162,6 +182,13 @@ fragment {
             float h = hash13(cellPos);
             t = fract(h + materialParams.gradientPhase);
             material.baseColor = evaluateGradient(t);
+        } else if (mode == 5) {
+            // Graphite pencil lead / drafting texture with organic micro-grain
+            vec2 screenCoord = gl_FragCoord.xy;
+            float grain = hash13(vec3(floor(screenCoord * 0.5), 1.0));
+            vec3 pencilColor = materialParams.outlineColor.rgb;
+            pencilColor = mix(pencilColor, pencilColor * (0.80 + 0.35 * grain), 0.65);
+            material.baseColor = vec4(pencilColor, materialParams.outlineColor.a);
         } else {
             material.baseColor = materialParams.outlineColor;
         }

@@ -73,6 +73,7 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         case surfaceUVDots = 2
         case cmykPrint = 3
         case hatchingLines = 4
+        case handdrawnSketch = 5
 
         public var title: String {
             switch self {
@@ -81,6 +82,7 @@ public final class FilamentToonMaterial: @unchecked Sendable {
             case .surfaceUVDots: return "Surface UV Dots (Manga Screentone)"
             case .cmykPrint: return "CMYK 4-Color Print Separation"
             case .hatchingLines: return "Hatching / Engraving Lines"
+            case .handdrawnSketch: return "Handdrawn Technical Sketch (CAD / Architectural)"
             }
         }
     }
@@ -144,6 +146,31 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         didSet { updateHalftoneParameters() }
     }
 
+    /// Organic hand-drawn jitter / stroke wobble in pencil hatching lines (0.0 = ruler-straight CAD, 1.0 = rough freehand sketch).
+    public var hatchJitter: Float = 0.25 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Number of hatching shade angle layers (1 = single hatch, 2 = cross-hatch, 3 = triple-angle shadow, 4 = dense core occlusion).
+    public var hatchLayers: Int32 = 3 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Darkness threshold for layer 1 hatching (0.0 to 1.0).
+    public var hatchThreshold1: Float = 0.15 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Darkness threshold for layer 2 cross-hatching (0.0 to 1.0).
+    public var hatchThreshold2: Float = 0.45 {
+        didSet { updateHalftoneParameters() }
+    }
+
+    /// Darkness threshold for layer 3 dense shadow hatching (0.0 to 1.0).
+    public var hatchThreshold3: Float = 0.70 {
+        didSet { updateHalftoneParameters() }
+    }
+
     public struct HalftonePreset: Sendable {
         public let name: String
         public let mode: HalftoneMode
@@ -154,6 +181,8 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         public let hardness: Float
         public let dotColor: (r: Float, g: Float, b: Float, a: Float)
         public let paperColor: (r: Float, g: Float, b: Float, a: Float)
+        public let hatchJitter: Float
+        public let hatchLayers: Int32
 
         public init(
             name: String,
@@ -164,7 +193,9 @@ public final class FilamentToonMaterial: @unchecked Sendable {
             dotSize: Float,
             hardness: Float,
             dotColor: (r: Float, g: Float, b: Float, a: Float),
-            paperColor: (r: Float, g: Float, b: Float, a: Float)
+            paperColor: (r: Float, g: Float, b: Float, a: Float),
+            hatchJitter: Float = 0.0,
+            hatchLayers: Int32 = 2
         ) {
             self.name = name
             self.mode = mode
@@ -175,6 +206,8 @@ public final class FilamentToonMaterial: @unchecked Sendable {
             self.hardness = hardness
             self.dotColor = dotColor
             self.paperColor = paperColor
+            self.hatchJitter = hatchJitter
+            self.hatchLayers = hatchLayers
         }
     }
 
@@ -226,6 +259,81 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         paperColor: (0.98, 0.97, 0.94, 1.0)
     )
 
+    /// Architectural drafting preset with crisp white paper and fine technical graphite hatching.
+    public static let technicalArchitecturalPreset = HalftonePreset(
+        name: "Architectural Drafting",
+        mode: .handdrawnSketch,
+        target: .fullSurface,
+        scale: 16.0,
+        angle: 45.0,
+        dotSize: 0.95,
+        hardness: 0.92,
+        dotColor: (0.12, 0.12, 0.14, 1.0),
+        paperColor: (1.00, 1.00, 1.00, 1.0),
+        hatchJitter: 0.15,
+        hatchLayers: 3
+    )
+
+    /// Technical blueprint schematic preset with deep navy background and cyan drafting ink lines.
+    public static let blueprintPatentPreset = HalftonePreset(
+        name: "Technical Blueprint",
+        mode: .handdrawnSketch,
+        target: .fullSurface,
+        scale: 14.0,
+        angle: 45.0,
+        dotSize: 1.05,
+        hardness: 0.95,
+        dotColor: (0.35, 0.82, 1.00, 1.0),
+        paperColor: (0.06, 0.15, 0.28, 1.0),
+        hatchJitter: 0.10,
+        hatchLayers: 3
+    )
+
+    /// Organic 2B graphite pencil sketch with paper grain and natural hand tremor on warm vellum.
+    public static let handdrawnPencil2BPreset = HalftonePreset(
+        name: "Handdrawn 2B Pencil",
+        mode: .handdrawnSketch,
+        target: .fullSurface,
+        scale: 18.0,
+        angle: 35.0,
+        dotSize: 1.10,
+        hardness: 0.72,
+        dotColor: (0.16, 0.15, 0.14, 1.0),
+        paperColor: (0.98, 0.96, 0.92, 1.0),
+        hatchJitter: 0.45,
+        hatchLayers: 4
+    )
+
+    /// High-precision CAD vector wireframe with razor-sharp black ink on pure white.
+    public static let cadVectorWireframePreset = HalftonePreset(
+        name: "CAD Vector Wireframe",
+        mode: .handdrawnSketch,
+        target: .fullSurface,
+        scale: 20.0,
+        angle: 45.0,
+        dotSize: 0.90,
+        hardness: 1.00,
+        dotColor: (0.02, 0.02, 0.03, 1.0),
+        paperColor: (1.00, 1.00, 1.00, 1.0),
+        hatchJitter: 0.00,
+        hatchLayers: 2
+    )
+
+    /// Transparent mylar preset with zero-alpha paper for effortless vector export into Figma.
+    public static let transparentMylarPreset = HalftonePreset(
+        name: "Transparent Mylar (Figma)",
+        mode: .handdrawnSketch,
+        target: .fullSurface,
+        scale: 16.0,
+        angle: 45.0,
+        dotSize: 1.00,
+        hardness: 0.88,
+        dotColor: (0.10, 0.10, 0.12, 1.0),
+        paperColor: (1.00, 1.00, 1.00, 0.0),
+        hatchJitter: 0.22,
+        hatchLayers: 3
+    )
+
     public func applyPreset(_ preset: HalftonePreset) {
         self.halftoneMode = preset.mode
         self.halftoneTarget = preset.target
@@ -235,6 +343,8 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         self.halftoneHardness = preset.hardness
         self.halftoneDotColor = preset.dotColor
         self.halftonePaperColor = preset.paperColor
+        self.hatchJitter = preset.hatchJitter
+        self.hatchLayers = preset.hatchLayers
     }
 
     // MARK: - Initialization & Teardown
@@ -338,6 +448,11 @@ public final class FilamentToonMaterial: @unchecked Sendable {
         "halftonePaperColor".withCString {
             FilamentBridge.setMaterialParameterFloat4(inst, $0, halftonePaperColor.r, halftonePaperColor.g, halftonePaperColor.b, halftonePaperColor.a)
         }
+        "hatchJitter".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, hatchJitter) }
+        "hatchLayers".withCString { FilamentBridge.setMaterialParameterInt(inst, $0, hatchLayers) }
+        "hatchThreshold1".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, hatchThreshold1) }
+        "hatchThreshold2".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, hatchThreshold2) }
+        "hatchThreshold3".withCString { FilamentBridge.setMaterialParameterFloat(inst, $0, hatchThreshold3) }
     }
 
     // MARK: - Application to Renderables & Assets

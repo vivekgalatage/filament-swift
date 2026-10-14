@@ -20,6 +20,7 @@ final class GTKSceneController {
         case outlineOnly = 4
         case comicHalftone = 5
         case halftoneWithOutline = 6
+        case handdrawnSketch = 7
 
         var title: String {
             switch self {
@@ -30,6 +31,7 @@ final class GTKSceneController {
             case .outlineOnly: return "Outline Only (Transparent Body)"
             case .comicHalftone: return "Comic Halftone (Pop-Art / Manga)"
             case .halftoneWithOutline: return "Halftone + Inked Outline"
+            case .handdrawnSketch: return "✏️ Handdrawn Technical Sketch"
             }
         }
     }
@@ -415,7 +417,74 @@ final class GTKSceneController {
             }
             outlineModel.setPriority(6)
             outlineModel.setVisible(true)
+
+        case .handdrawnSketch:
+            model.setPriority(4)
+            if let toon = toonMaterial {
+                toon.halftoneMode = .handdrawnSketch
+                toon.halftoneTarget = .fullSurface
+                model.applyToonMaterial(toon)
+            }
+            if !outlineModel.isLoaded {
+                try? outlineModel.loadGlb(at: url)
+                outlineModel.setRotation(radiansY: 0.0)
+                if outlineModel.hasAnimations {
+                    outlineModel.selectAnimation(at: model.activeAnimationIndex ?? 0)
+                }
+            }
+            if let outline = outlineMaterial {
+                if outline.outlineJitter < 0.001 {
+                    outline.outlineJitter = 0.25
+                }
+                outlineModel.applyOutlineMaterial(outline)
+            }
+            outlineModel.setPriority(6)
+            outlineModel.setVisible(true)
         }
+    }
+
+    // MARK: - Handdrawn Sketch & Technical Diagram controls
+
+    func setOutlineJitter(_ jitter: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineJitter = jitter
+        overlay?.setOutlineJitter(jitter)
+    }
+
+    func setOutlineJitterFreq(_ freq: Float) {
+        ensureToonMaterials()
+        outlineMaterial?.outlineJitterFreq = freq
+        overlay?.setOutlineJitterFreq(freq)
+    }
+
+    func setHatchJitter(_ jitter: Float) {
+        ensureToonMaterials()
+        toonMaterial?.hatchJitter = jitter
+        overlay?.setHatchJitter(jitter)
+    }
+
+    func setHatchLayers(_ layers: Int32) {
+        ensureToonMaterials()
+        toonMaterial?.hatchLayers = layers
+        overlay?.setHatchLayers(layers)
+    }
+
+    func setHatchThresholds(t1: Float, t2: Float, t3: Float) {
+        ensureToonMaterials()
+        toonMaterial?.hatchThreshold1 = t1
+        toonMaterial?.hatchThreshold2 = t2
+        toonMaterial?.hatchThreshold3 = t3
+        overlay?.setHatchThresholds(t1: t1, t2: t2, t3: t3)
+    }
+
+    func applySketchPreset(_ preset: FilamentToonMaterial.HalftonePreset) {
+        ensureToonMaterials()
+        toonMaterial?.applyPreset(preset)
+        overlay?.applyHalftonePreset(preset)
+
+        setOutlineColor(r: preset.dotColor.r, g: preset.dotColor.g, b: preset.dotColor.b)
+        setOutlineJitter(preset.hatchJitter * 0.85)
+        setOutlineThickness(preset.dotSize * 2.2)
     }
 
     private func ensureToonMaterials() {

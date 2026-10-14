@@ -145,6 +145,11 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             action: #selector(outlineOnlyShadingMenuClicked),
             keyEquivalent: "7"
         ))
+        shadingMenu.addItem(NSMenuItem(
+            title: "✏️ Handdrawn Technical Sketch",
+            action: #selector(handdrawnSketchShadingMenuClicked),
+            keyEquivalent: "8"
+        ))
 
         shadingMenu.addItem(NSMenuItem.separator())
         let halftoneMenu = NSMenu(title: "Halftone Preset")
@@ -156,6 +161,16 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         let halftoneItem = NSMenuItem(title: "Halftone Preset", action: nil, keyEquivalent: "")
         halftoneItem.submenu = halftoneMenu
         shadingMenu.addItem(halftoneItem)
+
+        let sketchMenu = NSMenu(title: "Sketch Preset")
+        sketchMenu.addItem(NSMenuItem(title: "📐 Architectural Drafting (White + Graphite)", action: #selector(sketchArchitecturalClicked), keyEquivalent: ""))
+        sketchMenu.addItem(NSMenuItem(title: "📘 Technical Blueprint (Cyan + Navy)", action: #selector(sketchBlueprintClicked), keyEquivalent: ""))
+        sketchMenu.addItem(NSMenuItem(title: "✏️ Handdrawn 2B Pencil (Wobble on Vellum)", action: #selector(sketchPencilClicked), keyEquivalent: ""))
+        sketchMenu.addItem(NSMenuItem(title: "✒️ CAD Vector Wireframe (Crisp Ink)", action: #selector(sketchCADClicked), keyEquivalent: ""))
+        sketchMenu.addItem(NSMenuItem(title: "📄 Transparent Mylar (Figma Ready)", action: #selector(sketchMylarClicked), keyEquivalent: ""))
+        let sketchItem = NSMenuItem(title: "Technical Sketch Preset", action: nil, keyEquivalent: "")
+        sketchItem.submenu = sketchMenu
+        shadingMenu.addItem(sketchItem)
 
         shadingMenu.addItem(NSMenuItem.separator())
         let outlineColorMenu = NSMenu(title: "Outline Color")
@@ -361,6 +376,41 @@ final class AppKitDemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
 
     @objc private func outlineOnlyShadingMenuClicked() {
         scene?.setShadingMode(.outlineOnly)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func handdrawnSketchShadingMenuClicked() {
+        scene?.setShadingMode(.handdrawnSketch)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func sketchArchitecturalClicked() {
+        scene?.setShadingMode(.handdrawnSketch)
+        scene?.applySketchPreset(FilamentToonMaterial.technicalArchitecturalPreset)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func sketchBlueprintClicked() {
+        scene?.setShadingMode(.handdrawnSketch)
+        scene?.applySketchPreset(FilamentToonMaterial.blueprintPatentPreset)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func sketchPencilClicked() {
+        scene?.setShadingMode(.handdrawnSketch)
+        scene?.applySketchPreset(FilamentToonMaterial.handdrawnPencil2BPreset)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func sketchCADClicked() {
+        scene?.setShadingMode(.handdrawnSketch)
+        scene?.applySketchPreset(FilamentToonMaterial.cadVectorWireframePreset)
+        inspector?.syncShadingMode()
+    }
+
+    @objc private func sketchMylarClicked() {
+        scene?.setShadingMode(.handdrawnSketch)
+        scene?.applySketchPreset(FilamentToonMaterial.transparentMylarPreset)
         inspector?.syncShadingMode()
     }
 
