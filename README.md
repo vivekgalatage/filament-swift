@@ -1,6 +1,6 @@
 # FilamentSwift
 
-Cross-platform **Swift 6** bindings and host views for **Google Filament** (v1.77.3) with first-class glTF 2.0 / `.glb` support, PBR rendering, and native alpha transparency.
+Cross-platform **Swift 6** bindings and host views for **[Google Filament](https://google.github.io/filament/dup/intro.html)** (v1.77.3) with first-class glTF 2.0 / `.glb` support, PBR rendering, and native alpha transparency.
 
 Designed for desktop and mobile: **macOS (AppKit / Metal)**, **Windows (Win32 / Vulkan)**, and **Linux (GTK 4 / Vulkan)**.
 
