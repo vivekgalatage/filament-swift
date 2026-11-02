@@ -22,6 +22,9 @@
 #include <backend/PixelBufferDescriptor.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <cstring>
 #include <vector>
 
@@ -396,18 +399,37 @@ namespace FilamentBridge {
         size_t requiredSize = static_cast<size_t>(width) * height * 4;
         if (bufferSize < requiredSize) return false;
 
+        // The pixels are in outBuffer only when the callback runs. A fence
+        // does not wait for the copy: Filament copies on another thread after
+        // the GPU finishes, so without this wait the buffer can hold an older
+        // frame, and with a fast GPU the copies can fall behind by many frames.
+        struct ReadState { std::atomic<bool> done{false}; };
+        auto* state = new ReadState();
         filament::backend::PixelBufferDescriptor pbd(
             outBuffer, requiredSize,
             filament::backend::PixelDataFormat::RGBA,
-            filament::backend::PixelDataType::UBYTE
+            filament::backend::PixelDataType::UBYTE,
+            [](void*, size_t, void* user) {
+                static_cast<ReadState*>(user)->done.store(true, std::memory_order_release);
+            },
+            state
         );
         renderer->readPixels(x, y, width, height, std::move(pbd));
-        auto* fence = engine->createFence();
-        if (fence) {
+        if (auto* fence = engine->createFence()) {
             filament::Fence::waitAndDestroy(fence, filament::Fence::Mode::FLUSH);
-            return true;
         }
-        return false;
+        // The callback runs on this thread, from pumpMessageQueues().
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (!state->done.load(std::memory_order_acquire)) {
+            engine->pumpMessageQueues();
+            if (state->done.load(std::memory_order_acquire)) break;
+            if (std::chrono::steady_clock::now() > deadline) {
+                return false;  // state leaks on purpose: the callback can still run
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+        delete state;
+        return true;
     }
 
     GlbContext* loadGlbFromMemory(filament::Engine* engine, filament::Scene* scene, const uint8_t* data, size_t size) {
